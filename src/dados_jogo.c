@@ -238,7 +238,7 @@ void aplicarRecompensaRota(TipoNoRota tipoRota, Combatente tripulacao[],
         curaPercentual = 50;
     } else if (tipoRota == ROTA_LOJA) {
         experiencia = xpBase / 2;
-        inflacaoLojasPercentual = 25;
+        inflacaoLojasPercentual += 25;
     } else {
         return;
     }

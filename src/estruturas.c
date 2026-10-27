@@ -257,7 +257,10 @@ ListaAlcance *calcularAreaAtuacao3x6(Tabuleiro3x6 *mapa, Combatente *origem, int
     for (linha = 0; linha < LINHAS_TABULEIRO; linha++) {
         for (coluna = 0; coluna < COLUNAS_TABULEIRO; coluna++) {
             int distancia = abs(linha - origem->linha) + abs(coluna - origem->coluna);
-            if (distancia <= alcance && !adicionarCelula(lista, linha, coluna)) {
+            if (distancia <= alcance &&
+                (!origem->habilidades[indiceHabilidade].disparo ||
+                 (linha == origem->linha && coluna != origem->coluna)) &&
+                !adicionarCelula(lista, linha, coluna)) {
                 liberarListaAlcance(lista);
                 return NULL;
             }

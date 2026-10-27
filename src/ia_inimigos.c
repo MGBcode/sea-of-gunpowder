@@ -150,7 +150,6 @@ bool selecionarAcaoIA(Tabuleiro3x6 *mapa, Combatente *inimigo, CandidatoAcao *es
             if (distancia > habilidade->alcance) {
                 continue;
             }
-            alvoAoAlcance = true;
             if (habilidade->custo_estamina < 0 ||
                 inimigo->estamina_atual < habilidade->custo_estamina) {
                 continue;
@@ -160,6 +159,7 @@ bool selecionarAcaoIA(Tabuleiro3x6 *mapa, Combatente *inimigo, CandidatoAcao *es
                  blackboard.stun_reservado[alvo->linha][alvo->coluna])) {
                 continue;
             }
+            alvoAoAlcance = true;
             dano = estimarDano(inimigo, alvo, habilidade);
             pontuacao = 40 + pontuarAlvo(inimigo, alvo) + dano / 2;
             if (dano >= alvo->vida_atual) {
@@ -216,7 +216,8 @@ bool selecionarAcaoIA(Tabuleiro3x6 *mapa, Combatente *inimigo, CandidatoAcao *es
             }
         }
     }
-    if (inimigo->estamina_atual <= 1) {
+    if (inimigo->estamina_atual <= 1 ||
+        (total == 0 && inimigo->estamina_atual < inimigo->estamina_maxima)) {
         double proporcao = inimigo->estamina_maxima > 0
                                ? (double)inimigo->estamina_atual / inimigo->estamina_maxima
                                : 0.0;
