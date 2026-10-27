@@ -19,7 +19,9 @@ typedef enum {
     EFEITO_DANO,
     EFEITO_BOMBA,
     EFEITO_MOTIVACAO,
-    EFEITO_ESTUNAR
+    EFEITO_ESTUNAR,
+    EFEITO_SANGRAMENTO,
+    EFEITO_VENENO
 } TipoEfeito;
 
 typedef struct {
@@ -71,7 +73,10 @@ typedef struct Combatente {
     bool aliado;
     bool vivo;
     bool em_descanso;
+    bool atacado_no_descanso;
     bool turno_perdido;
+    bool passiva_aprimorada;
+    int ganho_estamina_nivel;
     int habilidades_desbloqueadas;
     Habilidade habilidades[MAX_HABILIDADES];
     ListaItens build_passivos;
@@ -113,6 +118,10 @@ NoRota *avancarParaRota(NoRota *noAtual, int escolha);
 NoRota *fugirDaAventura(NoRota *raiz, ListaItens *inventarioGeral, int *nivelDificuldade);
 // Move um item passivo do inventário para a build do personagem.
 bool equiparItemPassivoBuild(ListaItens *inventario, ListaItens *buildPirata, int idItem);
+// Equipa um item passivo no combatente e aplica seus bônus.
+bool aplicarItemPassivoNoPirata(ListaItens *inventario, Combatente *pirata, int idItem);
+// Remove um item passivo do combatente e seus bônus.
+bool desequiparItemPassivoBuild(ListaItens *inventario, Combatente *pirata, int idItem);
 // Lista as células do tabuleiro dentro do alcance da habilidade escolhida.
 ListaAlcance *calcularAreaAtuacao3x6(Tabuleiro3x6 *mapa, Combatente *origem, int indiceHabilidade);
 // Libera a árvore de rotas, o inventário e a lista de alcance.

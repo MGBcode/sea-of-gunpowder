@@ -58,14 +58,15 @@ dkms.conf
 build/
 
 # Repomix e arquivos compactados (proibido enviar executáveis/zips temporários)
-repomix-output.xml
-repomix-output.*
 *.zip
 *.7z
 *.tar.gz
 
-# Toolchains locais e arquivos de sistema
+# Toolchains locais
 w64devkit/
 .toolchain/
+
+repomix-output.xml
+repomix-output.*
 .DS_Store
 Thumbs.db

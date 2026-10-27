@@ -122,12 +122,25 @@ NoRota *avancarParaRota(NoRota *noAtual, int escolha)
 // Encerra a aventura, libera suas rotas e reinicia a dificuldade.
 NoRota *fugirDaAventura(NoRota *raiz, ListaItens *inventarioGeral, int *nivelDificuldade)
 {
-    (void)inventarioGeral;
+    NoItem **elo;
     liberarArvoreRotas(raiz);
-    if (nivelDificuldade != NULL) {
-        *nivelDificuldade = 1;
+    if (inventarioGeral != NULL) {
+        elo = &inventarioGeral->inicio;
+        while (*elo != NULL) {
+            NoItem *item = *elo;
+            if (item->item.tipo == ITEM_CONSUMIVEL || item->item.tipo == ITEM_ATIVO) {
+                *elo = item->proximo;
+                free(item);
+                inventarioGeral->tamanho--;
+            } else {
+                elo = &item->proximo;
+            }
+        }
     }
-    return NULL;
+    if (nivelDificuldade != NULL) {
+        (*nivelDificuldade)++;
+    }
+    return construirArvoreRotas(nivelDificuldade != NULL ? *nivelDificuldade : 2);
 }
 
 // Move um item passivo do inventário para a build do personagem.
@@ -151,6 +164,71 @@ bool equiparItemPassivoBuild(ListaItens *inventario, ListaItens *buildPirata, in
     item->proximo = buildPirata->inicio;
     buildPirata->inicio = item;
     buildPirata->tamanho++;
+    return true;
+}
+
+// Aplica ou remove os bônus diretos de um item passivo.
+static void alterarAtributosItem(Combatente *pirata, const Item *item, int fator)
+{
+    pirata->vida_maxima += fator * item->bonus_vida;
+    pirata->vida_atual += fator * item->bonus_vida;
+    pirata->velocidade += fator * item->bonus_velocidade;
+    pirata->dano_base += fator * item->bonus_dano;
+    if (pirata->vida_maxima < 1) {
+        pirata->vida_maxima = 1;
+    }
+    if (pirata->vida_atual > pirata->vida_maxima) {
+        pirata->vida_atual = pirata->vida_maxima;
+    }
+    if (pirata->vida_atual < 0) {
+        pirata->vida_atual = 0;
+    }
+}
+
+// Equipa um item passivo no combatente e aplica seus bônus.
+bool aplicarItemPassivoNoPirata(ListaItens *inventario, Combatente *pirata, int idItem)
+{
+    NoItem *item;
+    if (inventario == NULL || pirata == NULL ||
+        pirata->build_passivos.tamanho >= MAX_ITENS_PASSIVOS) {
+        return false;
+    }
+    item = inventario->inicio;
+    while (item != NULL && item->item.id != idItem) {
+        item = item->proximo;
+    }
+    if (item == NULL || item->item.tipo != ITEM_PASSIVO) {
+        return false;
+    }
+    if (!equiparItemPassivoBuild(inventario, &pirata->build_passivos, idItem)) {
+        return false;
+    }
+    alterarAtributosItem(pirata, &item->item, 1);
+    return true;
+}
+
+// Remove um item passivo do combatente e seus bônus.
+bool desequiparItemPassivoBuild(ListaItens *inventario, Combatente *pirata, int idItem)
+{
+    NoItem **elo;
+    NoItem *item;
+    if (inventario == NULL || pirata == NULL) {
+        return false;
+    }
+    elo = &pirata->build_passivos.inicio;
+    while (*elo != NULL && (*elo)->item.id != idItem) {
+        elo = &(*elo)->proximo;
+    }
+    if (*elo == NULL || (*elo)->item.tipo != ITEM_PASSIVO) {
+        return false;
+    }
+    item = *elo;
+    *elo = item->proximo;
+    pirata->build_passivos.tamanho--;
+    alterarAtributosItem(pirata, &item->item, -1);
+    item->proximo = inventario->inicio;
+    inventario->inicio = item;
+    inventario->tamanho++;
     return true;
 }
 
@@ -189,4 +267,3 @@ void liberarEstruturasJogo(NoRota *raiz, ListaItens *inventario, ListaAlcance *a
     liberarListaItens(inventario);
     liberarListaAlcance(alcance);
 }
-

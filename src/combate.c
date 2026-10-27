@@ -25,7 +25,7 @@ static void aplicarDano(Tabuleiro3x6 *mapa, Combatente *alvo, int dano)
     }
     if (alvo->em_descanso) {
         danoRecebido += danoRecebido / 2;
-        alvo->em_descanso = false;
+        alvo->atacado_no_descanso = true;
     }
     alvo->vida_atual -= danoRecebido;
     if (alvo->vida_atual <= 0) {
@@ -52,6 +52,10 @@ static void aplicarEfeito(Combatente *alvo, TipoEfeito efeito)
         }
     } else if (efeito == EFEITO_ESTUNAR) {
         alvo->turnos_atordoado = 1;
+    } else if (efeito == EFEITO_SANGRAMENTO) {
+        alvo->turnos_sangramento = 3;
+    } else if (efeito == EFEITO_VENENO) {
+        alvo->turnos_veneno = 2;
     }
 }
 
@@ -195,16 +199,29 @@ void iniciarDescanso(Combatente *unidade)
         return;
     }
     unidade->em_descanso = true;
+    unidade->atacado_no_descanso = false;
     unidade->turno_perdido = true;
 }
 
 // Aplica efeitos de status no início do turno.
-void processarStatusInicioTurno(Combatente *unidade)
+void processarStatusInicioTurno(Tabuleiro3x6 *mapa, Combatente *unidade)
 {
     if (unidade == NULL || !unidade->vivo) {
         return;
     }
     unidade->turno_perdido = false;
+    if (unidade->em_descanso) {
+        if (unidade->atacado_no_descanso) {
+            unidade->estamina_atual += unidade->estamina_maxima / 2;
+        } else {
+            unidade->estamina_atual = unidade->estamina_maxima;
+        }
+        if (unidade->estamina_atual > unidade->estamina_maxima) {
+            unidade->estamina_atual = unidade->estamina_maxima;
+        }
+        unidade->em_descanso = false;
+        unidade->atacado_no_descanso = false;
+    }
     if (unidade->turnos_sangramento > 0) {
         unidade->vida_atual -= 10;
         unidade->turnos_sangramento--;
@@ -223,6 +240,10 @@ void processarStatusInicioTurno(Combatente *unidade)
     if (unidade->vida_atual <= 0) {
         unidade->vida_atual = 0;
         unidade->vivo = false;
+        if (mapa != NULL && coordenadaValida(unidade->linha, unidade->coluna) &&
+            mapa->celulas[unidade->linha][unidade->coluna] == unidade) {
+            mapa->celulas[unidade->linha][unidade->coluna] = NULL;
+        }
         liberarListaItensCombatente(&unidade->build_passivos);
         return;
     }

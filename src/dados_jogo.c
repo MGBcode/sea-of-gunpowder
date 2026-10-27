@@ -58,6 +58,7 @@ bool criarPirataInicial(int indice, Combatente *destino)
     }
     definirCombatente(destino, indice + 1, nomes[indice], vidas[indice], estaminas[indice],
                       velocidades[indice], defesas[indice], danos[indice], true);
+    destino->ganho_estamina_nivel = estaminas[indice] >= 5 ? 2 : 1;
     definirHabilidade(&destino->habilidades[1], "Disparo certeiro", 7, 4, 2, 25, 0, EFEITO_DANO);
     destino->habilidades[1].disparo = true;
     definirHabilidade(&destino->habilidades[2], "Bomba de estilhacos", 12, 3, 3, 10, 1, EFEITO_BOMBA);
@@ -129,6 +130,8 @@ int carregarItensIniciais(Item itens[], int capacidade)
 // Adiciona experiência e aplica os atributos dos níveis 1 a 6.
 bool ganharExperienciaEvoluir(Combatente *unidade, int experiencia)
 {
+    int aumentoVida;
+    int aumentoDano;
     if (unidade == NULL || experiencia < 0 || unidade->nivel < 1 || unidade->nivel >= 6) {
         return false;
     }
@@ -136,11 +139,27 @@ bool ganharExperienciaEvoluir(Combatente *unidade, int experiencia)
     while (unidade->nivel < 6 && unidade->experiencia >= unidade->nivel * 100) {
         unidade->experiencia -= unidade->nivel * 100;
         unidade->nivel++;
-        unidade->vida_maxima += 10;
-        unidade->vida_atual += 10;
-        unidade->dano_base += 2;
-        if (unidade->nivel == 3 || unidade->nivel == 6) {
-            unidade->habilidades_desbloqueadas++;
+        aumentoVida = unidade->vida_maxima * 8 / 100;
+        if (aumentoVida < 5) {
+            aumentoVida = 5;
+        }
+        aumentoDano = unidade->dano_base * 8 / 100;
+        if (aumentoDano < 1) {
+            aumentoDano = 1;
+        }
+        unidade->vida_maxima += aumentoVida;
+        unidade->vida_atual += aumentoVida;
+        unidade->dano_base += aumentoDano;
+        if (unidade->nivel == 2 || unidade->nivel == 5) {
+            unidade->estamina_maxima += unidade->ganho_estamina_nivel;
+            unidade->estamina_atual += unidade->ganho_estamina_nivel;
+        } else if (unidade->nivel == 3) {
+            unidade->habilidades_desbloqueadas = 2;
+        } else if (unidade->nivel == 4) {
+            unidade->passiva_aprimorada = true;
+            unidade->defesa++;
+        } else if (unidade->nivel == 6) {
+            unidade->habilidades_desbloqueadas = 3;
         }
     }
     return true;

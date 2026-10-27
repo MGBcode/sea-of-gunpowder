@@ -14,6 +14,8 @@
       "bin/**",
       ".git/**",
       "repomix-output.xml",
+      "REQUIREMENTS.md",
+      "README.md",
       "repomix-output.*",
       "*.zip",
       "*.7z",

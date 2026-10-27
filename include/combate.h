@@ -12,7 +12,6 @@ void executarAtaqueOuHabilidade(Tabuleiro3x6 *mapa, Combatente *atacante, int in
 // Encerra o turno da unidade e marca sua vulnerabilidade.
 void iniciarDescanso(Combatente *unidade);
 // Aplica efeitos de status no início do turno.
-void processarStatusInicioTurno(Combatente *unidade);
+void processarStatusInicioTurno(Tabuleiro3x6 *mapa, Combatente *unidade);
 
 #endif
-
