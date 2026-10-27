@@ -1,0 +1,35 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Compilar jogo",
+      "type": "shell",
+      "command": "make",
+      "options": {
+        "env": {
+          "PATH": "C:\\w64devkit\\bin;${env:PATH}"
+        }
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "Executar jogo",
+      "type": "shell",
+      "command": "${workspaceFolder}/build/jogo",
+      "options": {
+        "env": {
+          "PATH": "C:\\w64devkit\\bin;${env:PATH}"
+        }
+      },
+      "windows": {
+        "command": "${workspaceFolder}\\build\\jogo.exe"
+      },
+      "dependsOn": "Compilar jogo",
+      "problemMatcher": []
+    }
+  ]
+}

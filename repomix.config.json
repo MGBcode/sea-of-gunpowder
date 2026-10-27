@@ -1,0 +1,33 @@
+{
+  "output": {
+    "filePath": "repomix-output.xml",
+    "style": "xml",
+    "removeEmptyLines": true,
+    "showLineNumbers": false
+  },
+  "ignore": {
+    "useGitignore": true,
+    "customPatterns": [
+      "assets/**",
+      "resources/**",
+      "build/**",
+      "bin/**",
+      ".git/**",
+      "repomix-output.xml",
+      "repomix-output.*",
+      "*.zip",
+      "*.7z",
+      "w64devkit/**",
+      ".toolchain/**",
+      "**/*.png",
+      "**/*.jpg",
+      "**/*.aseprite",
+      "**/*.wav",
+      "**/*.mp3",
+      "**/*.ogg",
+      "**/*.ttf",
+      "**/*.blend",
+      "**/*.obj"
+    ]
+  }
+}
