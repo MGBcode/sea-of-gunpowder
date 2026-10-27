@@ -91,12 +91,12 @@ bool posicionarPirataPreBatalha(Tabuleiro3x6 *mapa, Combatente *pirata, int linh
     return true;
 }
 
-// Move uma unidade adjacente e consome estamina conforme o deslocamento.
+// Move uma unidade até seu alcance permitido e consome estamina pela distância.
 bool moverCombatente3x6(Tabuleiro3x6 *mapa, Combatente *unidade, int destinoLinha, int destinoColuna)
 {
-    int deslocamentoLinha;
-    int deslocamentoColuna;
-    int custo;
+    int distancia;
+    int velocidadeEfetiva;
+    int passoMaximo;
     if (mapa == NULL || unidade == NULL || !unidade->vivo ||
         !coordenadaValida(unidade->linha, unidade->coluna) ||
         !coordenadaValida(destinoLinha, destinoColuna) ||
@@ -104,18 +104,23 @@ bool moverCombatente3x6(Tabuleiro3x6 *mapa, Combatente *unidade, int destinoLinh
         mapa->celulas[destinoLinha][destinoColuna] != NULL) {
         return false;
     }
-    deslocamentoLinha = abs(destinoLinha - unidade->linha);
-    deslocamentoColuna = abs(destinoColuna - unidade->coluna);
-    if (deslocamentoLinha > 1 || deslocamentoColuna > 1 ||
-        deslocamentoLinha + deslocamentoColuna == 0) {
+    distancia = abs(destinoLinha - unidade->linha) + abs(destinoColuna - unidade->coluna);
+    velocidadeEfetiva = unidade->velocidade;
+    if (unidade->turnos_motivacao > 0) {
+        velocidadeEfetiva += 2;
+    }
+    if (unidade->turnos_veneno > 0) {
+        velocidadeEfetiva -= 3;
+    }
+    passoMaximo = velocidadeEfetiva >= 7 ? 2 : 1;
+    if (distancia < 1 || distancia > passoMaximo) {
         return false;
     }
-    custo = deslocamentoLinha == 1 && deslocamentoColuna == 1 ? 2 : 1;
-    if (unidade->estamina_atual < custo) {
+    if (unidade->estamina_atual < distancia) {
         return false;
     }
     mapa->celulas[unidade->linha][unidade->coluna] = NULL;
-    unidade->estamina_atual -= custo;
+    unidade->estamina_atual -= distancia;
     unidade->linha = destinoLinha;
     unidade->coluna = destinoColuna;
     mapa->celulas[destinoLinha][destinoColuna] = unidade;

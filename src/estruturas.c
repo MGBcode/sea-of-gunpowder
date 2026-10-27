@@ -48,7 +48,7 @@ static void liberarListaAlcance(ListaAlcance *lista)
 }
 
 // Cria uma etapa e seus três caminhos até o chefe final.
-static NoRota *criarEtapaRota(int dificuldade, int etapa, int totalEtapas)
+static NoRota *criarEtapaRota(int dificuldade, int etapa, TipoNoRota tipo)
 {
     NoRota *no = malloc(sizeof(*no));
     if (no == NULL) {
@@ -56,18 +56,24 @@ static NoRota *criarEtapaRota(int dificuldade, int etapa, int totalEtapas)
     }
     no->nivel_dificuldade = dificuldade;
     no->etapa = etapa;
-    no->chefe_final = etapa == totalEtapas;
+    no->tipo = tipo;
+    no->chefe_final = tipo == ROTA_CHEFE;
     no->caminho1 = NULL;
     no->caminho2 = NULL;
     no->loja = NULL;
-    if (!no->chefe_final) {
-        no->caminho1 = criarEtapaRota(dificuldade, etapa + 1, totalEtapas);
-        no->caminho2 = criarEtapaRota(dificuldade, etapa + 1, totalEtapas);
-        no->loja = criarEtapaRota(dificuldade, etapa + 1, totalEtapas);
-        if (no->caminho1 == NULL || no->caminho2 == NULL || no->loja == NULL) {
-            liberarArvoreRotas(no);
-            return NULL;
-        }
+    if (etapa < 3) {
+        no->caminho1 = criarEtapaRota(dificuldade, etapa + 1, ROTA_CAMINHO_1);
+        no->caminho2 = criarEtapaRota(dificuldade, etapa + 1, ROTA_CAMINHO_2);
+        no->loja = criarEtapaRota(dificuldade, etapa + 1, ROTA_LOJA);
+    } else if (etapa == 3) {
+        no->caminho1 = criarEtapaRota(dificuldade, 4, ROTA_CHEFE);
+        no->caminho2 = criarEtapaRota(dificuldade, 4, ROTA_CHEFE);
+        no->loja = criarEtapaRota(dificuldade, 4, ROTA_CHEFE);
+    }
+    if ((etapa < 4) &&
+        (no->caminho1 == NULL || no->caminho2 == NULL || no->loja == NULL)) {
+        liberarArvoreRotas(no);
+        return NULL;
     }
     return no;
 }
@@ -98,7 +104,7 @@ NoRota *construirArvoreRotas(int nivelDificuldade)
     if (nivelDificuldade < 1) {
         nivelDificuldade = 1;
     }
-    return criarEtapaRota(nivelDificuldade, 1, 3);
+    return criarEtapaRota(nivelDificuldade, 0, ROTA_RAIZ);
 }
 
 // Retorna o próximo nó conforme a rota escolhida.

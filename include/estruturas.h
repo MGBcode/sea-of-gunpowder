@@ -10,6 +10,14 @@
 #define MAX_ITENS_PASSIVOS 5
 
 typedef enum {
+    ROTA_RAIZ,
+    ROTA_CAMINHO_1,
+    ROTA_CAMINHO_2,
+    ROTA_LOJA,
+    ROTA_CHEFE
+} TipoNoRota;
+
+typedef enum {
     ITEM_CONSUMIVEL,
     ITEM_PASSIVO,
     ITEM_ATIVO
@@ -79,6 +87,7 @@ typedef struct Combatente {
     int ganho_estamina_nivel;
     int habilidades_desbloqueadas;
     Habilidade habilidades[MAX_HABILIDADES];
+    int turnos_desde_uso[MAX_HABILIDADES];
     ListaItens build_passivos;
     int turnos_motivacao;
     int turnos_atordoado;
@@ -104,6 +113,7 @@ typedef struct {
 typedef struct NoRota {
     int nivel_dificuldade;
     int etapa;
+    TipoNoRota tipo;
     bool chefe_final;
     struct NoRota *caminho1;
     struct NoRota *caminho2;

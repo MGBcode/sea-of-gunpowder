@@ -3,8 +3,14 @@
 
 #include "estruturas.h"
 
+typedef enum {
+    ACAO_IA_HABILIDADE = 0,
+    ACAO_IA_MOVER = 1,
+    ACAO_IA_DESCANSAR = 2
+} TipoAcaoIA;
+
 typedef struct {
-    int tipo_acao;
+    TipoAcaoIA tipo_acao;
     int linha_alvo;
     int coluna_alvo;
     int indice_habilidade;
@@ -17,4 +23,3 @@ void ordenarFilaPorVelocidade(Combatente *fila[], int totalVivos);
 void ordenarCandidatosIA(CandidatoAcao vetor[], int total);
 
 #endif
-

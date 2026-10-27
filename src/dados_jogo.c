@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+int inflacaoLojasPercentual = 0;
+
 // Preenche uma habilidade com os valores fornecidos.
 static void definirHabilidade(Habilidade *habilidade, const char *nome, int dano, int alcance,
                               int custo, int critico, int raio, TipoEfeito efeito)
@@ -39,6 +41,9 @@ static void definirCombatente(Combatente *unidade, int id, const char *nome, int
     definirHabilidade(&unidade->habilidades[0], "Ataque basico", 0, 3, 1, 10, 0, EFEITO_DANO);
     definirHabilidade(&unidade->habilidades[1], "Habilidade Nv 3", 5, 3, 2, 15, 0, EFEITO_DANO);
     definirHabilidade(&unidade->habilidades[2], "Habilidade Nv 6", 8, 4, 3, 20, 1, EFEITO_BOMBA);
+    unidade->turnos_desde_uso[0] = -1;
+    unidade->turnos_desde_uso[1] = -1;
+    unidade->turnos_desde_uso[2] = -1;
 }
 
 // Retorna um pirata inicial preenchido pelo índice solicitado.
@@ -81,6 +86,55 @@ bool criarInimigoInicial(int indice, Combatente *destino)
     }
     definirCombatente(destino, 100 + indice, nomes[indice], vidas[indice], estaminas[indice],
                       velocidades[indice], defesas[indice], danos[indice], false);
+    return true;
+}
+
+// Escalona os atributos de um inimigo conforme a dificuldade da run.
+void escalonarInimigoPorDificuldade(Combatente *inimigo, int nivelDificuldade)
+{
+    int bonus;
+    int aumentoVidaMaxima;
+    int aumentoVidaAtual;
+    int aumentoDano;
+    if (inimigo == NULL || nivelDificuldade <= 1) {
+        return;
+    }
+    bonus = nivelDificuldade - 1;
+    aumentoVidaMaxima = (inimigo->vida_maxima * 15 * bonus) / 100;
+    aumentoVidaAtual = (inimigo->vida_atual * 15 * bonus) / 100;
+    aumentoDano = (inimigo->dano_base * 15 * bonus) / 100;
+    if (aumentoVidaMaxima < 5 * bonus) {
+        aumentoVidaMaxima = 5 * bonus;
+    }
+    if (aumentoVidaAtual < 5 * bonus) {
+        aumentoVidaAtual = 5 * bonus;
+    }
+    if (aumentoDano < 2 * bonus) {
+        aumentoDano = 2 * bonus;
+    }
+    inimigo->vida_maxima += aumentoVidaMaxima;
+    inimigo->vida_atual += aumentoVidaAtual;
+    if (inimigo->vida_atual > inimigo->vida_maxima) {
+        inimigo->vida_atual = inimigo->vida_maxima;
+    }
+    inimigo->dano_base += aumentoDano;
+}
+
+// Retorna um mercador armado para um assalto à loja.
+bool criarMercadorLoja(int indice, Combatente *destino, int nivelDificuldade)
+{
+    static const char *nomes[] = {
+        "Mercador da Costa", "Mercador do Porto", "Mercador da Coroa"
+    };
+    if (destino == NULL || indice < 0 || indice >= 3) {
+        return false;
+    }
+    definirCombatente(destino, 300 + indice, nomes[indice], 180, 7, 6, 5, 18, false);
+    destino->habilidades_desbloqueadas = 2;
+    definirHabilidade(&destino->habilidades[1], "Mosquete do mercador", 12, 4, 2, 15, 0,
+                      EFEITO_DANO);
+    destino->habilidades[1].disparo = true;
+    escalonarInimigoPorDificuldade(destino, nivelDificuldade);
     return true;
 }
 
@@ -163,6 +217,57 @@ bool ganharExperienciaEvoluir(Combatente *unidade, int experiencia)
         }
     }
     return true;
+}
+
+// Aplica a recompensa de XP, cura e inflação correspondente à rota concluída.
+void aplicarRecompensaRota(TipoNoRota tipoRota, Combatente tripulacao[],
+                           int totalTripulacao, int xpBase)
+{
+    int experiencia;
+    int curaPercentual;
+    int indice;
+    if (tripulacao == NULL || totalTripulacao <= 0 || xpBase < 0) {
+        return;
+    }
+    experiencia = xpBase;
+    curaPercentual = 0;
+    if (tipoRota == ROTA_CAMINHO_2) {
+        experiencia = xpBase * 2;
+        curaPercentual = 25;
+    } else if (tipoRota == ROTA_CAMINHO_1) {
+        curaPercentual = 50;
+    } else if (tipoRota == ROTA_LOJA) {
+        experiencia = xpBase / 2;
+        inflacaoLojasPercentual = 25;
+    } else {
+        return;
+    }
+    for (indice = 0; indice < totalTripulacao; indice++) {
+        Combatente *aliado = &tripulacao[indice];
+        if (!aliado->vivo || !aliado->aliado) {
+            continue;
+        }
+        if (aliado->nivel >= 6) {
+            aliado->experiencia += experiencia;
+        } else {
+            (void)ganharExperienciaEvoluir(aliado, experiencia);
+        }
+        if (curaPercentual > 0) {
+            aliado->vida_atual += (aliado->vida_maxima * curaPercentual) / 100;
+            if (aliado->vida_atual > aliado->vida_maxima) {
+                aliado->vida_atual = aliado->vida_maxima;
+            }
+        }
+    }
+}
+
+// Ajusta o preço conforme a inflação atual das lojas.
+int aplicarInflacaoLoja(int preco)
+{
+    if (preco <= 0 || inflacaoLojasPercentual <= 0) {
+        return preco;
+    }
+    return preco + (preco * inflacaoLojasPercentual) / 100;
 }
 
 // Libera os nós da build passiva do combatente.
