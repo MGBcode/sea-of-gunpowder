@@ -17,7 +17,7 @@ static int calcularVelocidadeEfetiva(const Combatente *unidade)
     return velocidade;
 }
 
-// Ordena os turnos pela velocidade efetiva em ordem decrescente.
+// Ordena por velocidade efetiva decrescente com InsertionSort.
 void ordenarFilaPorVelocidade(Combatente *fila[], int totalVivos)
 {
     int indice;
@@ -36,7 +36,7 @@ void ordenarFilaPorVelocidade(Combatente *fila[], int totalVivos)
     }
 }
 
-// Ordena candidatos da IA por pontuação decrescente.
+// Ordena candidatos do Tactical Blackboard por pontuação decrescente.
 void ordenarCandidatosIA(CandidatoAcao vetor[], int total)
 {
     int indice;
@@ -53,4 +53,3 @@ void ordenarCandidatosIA(CandidatoAcao vetor[], int total)
         vetor[posicao] = candidato;
     }
 }
-

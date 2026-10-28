@@ -157,18 +157,18 @@ bool criarChefeFinal(Combatente *destino)
 int carregarItensIniciais(Item itens[], int capacidade)
 {
     static const Item catalogo[TOTAL_ITENS_PREDEFINIDOS] = {
-        { 1, "Tonico de vida", ITEM_CONSUMIVEL, 1, 15, 0, 0, 0 },
-        { 2, "Racao salgada", ITEM_CONSUMIVEL, 1, 10, 0, 0, 0 },
-        { 3, "Bomba de bolso", ITEM_CONSUMIVEL, 1, 20, 0, 0, 0 },
-        { 4, "Antidoto", ITEM_CONSUMIVEL, 1, 12, 0, 0, 0 },
-        { 5, "Bota do marujo", ITEM_PASSIVO, 1, 25, 0, 1, 0 },
-        { 6, "Colete reforcado", ITEM_PASSIVO, 1, 30, 10, 0, 0 },
-        { 7, "Luneta de prata", ITEM_PASSIVO, 1, 35, 0, 0, 2 },
-        { 8, "Anel da sorte", ITEM_PASSIVO, 1, 40, 0, 0, 1 },
-        { 9, "Cinto de estamina", ITEM_PASSIVO, 1, 28, 0, 0, 0 },
-        { 10, "Mapa secreto", ITEM_PASSIVO, 1, 45, 5, 1, 0 },
-        { 11, "Mosquete pesado", ITEM_ATIVO, 1, 55, 0, 0, 0 },
-        { 12, "Sabre de mare", ITEM_ATIVO, 1, 50, 0, 0, 0 }
+        { 1, "Tonico de vida", ITEM_CONSUMIVEL, 1, 15, 0, 0, 0, CONSUMIVEL_CURAR_VIDA, 30 },
+        { 2, "Racao salgada", ITEM_CONSUMIVEL, 1, 10, 0, 0, 0, CONSUMIVEL_RESTAURAR_ESTAMINA, 3 },
+        { 3, "Bomba de bolso", ITEM_CONSUMIVEL, 1, 20, 0, 0, 0, CONSUMIVEL_SEM_EFEITO, 0 },
+        { 4, "Antidoto", ITEM_CONSUMIVEL, 1, 12, 0, 0, 0, CONSUMIVEL_REMOVER_STATUS, 0 },
+        { 5, "Bota do marujo", ITEM_PASSIVO, 1, 25, 0, 1, 0, CONSUMIVEL_SEM_EFEITO, 0 },
+        { 6, "Colete reforcado", ITEM_PASSIVO, 1, 30, 10, 0, 0, CONSUMIVEL_SEM_EFEITO, 0 },
+        { 7, "Luneta de prata", ITEM_PASSIVO, 1, 35, 0, 0, 2, CONSUMIVEL_SEM_EFEITO, 0 },
+        { 8, "Anel da sorte", ITEM_PASSIVO, 1, 40, 0, 0, 1, CONSUMIVEL_SEM_EFEITO, 0 },
+        { 9, "Cinto de estamina", ITEM_PASSIVO, 1, 28, 0, 0, 0, CONSUMIVEL_SEM_EFEITO, 0 },
+        { 10, "Mapa secreto", ITEM_PASSIVO, 1, 45, 5, 1, 0, CONSUMIVEL_SEM_EFEITO, 0 },
+        { 11, "Mosquete pesado", ITEM_ATIVO, 1, 55, 0, 0, 0, CONSUMIVEL_SEM_EFEITO, 0 },
+        { 12, "Sabre de mare", ITEM_ATIVO, 1, 50, 0, 0, 0, CONSUMIVEL_SEM_EFEITO, 0 }
     };
     int total = capacidade < TOTAL_ITENS_PREDEFINIDOS ? capacidade : TOTAL_ITENS_PREDEFINIDOS;
     int indice;

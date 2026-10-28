@@ -3,7 +3,15 @@
 
 #include "estruturas.h"
 
-// Posiciona um aliado em uma das duas colunas iniciais do tabuleiro.
+// Monta a fila da rodada com combatentes vivos ordenados por velocidade.
+int montarFilaTurnos(Tabuleiro3x6 *mapa, Combatente *filaOut[]);
+// Aplica e consome um item de cura, estamina ou remoção de status.
+bool usarItemConsumivel(Combatente *unidade, Item *item);
+// Verifica se uma equipe foi derrotada e informa se os aliados venceram.
+bool verificarFimDeCombate(Tabuleiro3x6 *mapa, bool *vitoriaAliada);
+// Avança até a próxima unidade viva que possa agir.
+bool avancarProximoTurno(Combatente *fila[], int totalVivos, int *indiceAtual, Tabuleiro3x6 *mapa);
+// Posiciona ou troca aliados entre as duas colunas iniciais do tabuleiro.
 bool posicionarPirataPreBatalha(Tabuleiro3x6 *mapa, Combatente *pirata, int linha, int coluna);
 // Move uma unidade adjacente e consome estamina conforme o deslocamento.
 bool moverCombatente3x6(Tabuleiro3x6 *mapa, Combatente *unidade, int destinoLinha, int destinoColuna);

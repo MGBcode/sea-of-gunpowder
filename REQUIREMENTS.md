@@ -17,9 +17,10 @@
 2. Baixe e extraia o ZIP oficial da Raylib 5.5. Da pasta
    `raylib-5.5_win64_mingw-w64` extraída, copie todos os `.h` de `include` para
    `C:\w64devkit\include` e `lib\libraylib.a` para `C:\w64devkit\lib`.
-3. Para usar `make` diretamente em um terminal, adicione
-   `C:\w64devkit\bin` ao `PATH` do usuário e abra um terminal novo. As tarefas
-   do VS Code já acrescentam esse diretório ao `PATH` automaticamente.
+3. Para usar `make` diretamente em um terminal, coloque
+   `C:\w64devkit\bin` no início do `PATH` do usuário, antes de outros GCC/MinGW,
+   e abra um terminal novo. As tarefas do VS Code já acrescentam esse diretório
+   ao `PATH` automaticamente.
 4. No terminal, entre na pasta do projeto, compile com `make` e execute
    `.\build\jogo.exe`. Antes de compactar a entrega, execute `make clean`.
 

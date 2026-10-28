@@ -78,8 +78,8 @@ static NoRota *criarEtapaRota(int dificuldade, int etapa, TipoNoRota tipo)
     return no;
 }
 
-// Adiciona uma coordenada ao final da lista de alcance.
-static bool adicionarCelula(ListaAlcance *lista, int linha, int coluna)
+// Adiciona uma coordenada e seu indicador de fogo amigo à lista.
+static bool adicionarCelula(ListaAlcance *lista, int linha, int coluna, int perigoFogoAmigo)
 {
     NoCelula *nova = malloc(sizeof(*nova));
     NoCelula **fim;
@@ -88,6 +88,7 @@ static bool adicionarCelula(ListaAlcance *lista, int linha, int coluna)
     }
     nova->linha = linha;
     nova->coluna = coluna;
+    nova->perigo_fogo_amigo = perigoFogoAmigo;
     nova->proximo = NULL;
     fim = &lista->inicio;
     while (*fim != NULL) {
@@ -96,6 +97,20 @@ static bool adicionarCelula(ListaAlcance *lista, int linha, int coluna)
     *fim = nova;
     lista->tamanho++;
     return true;
+}
+
+// Conta os itens presentes na lista para impor o limite real da build.
+static int contarItens(const ListaItens *lista)
+{
+    const NoItem *atual;
+    int total = 0;
+    if (lista == NULL) {
+        return 0;
+    }
+    for (atual = lista->inicio; atual != NULL; atual = atual->proximo) {
+        total++;
+    }
+    return total;
 }
 
 // Constrói a árvore ternária de rotas até o confronto final.
@@ -154,7 +169,12 @@ bool equiparItemPassivoBuild(ListaItens *inventario, ListaItens *buildPirata, in
 {
     NoItem **elo;
     NoItem *item;
-    if (inventario == NULL || buildPirata == NULL || buildPirata->tamanho >= MAX_ITENS_PASSIVOS) {
+    int itensNaBuild;
+    if (inventario == NULL || buildPirata == NULL) {
+        return false;
+    }
+    itensNaBuild = contarItens(buildPirata);
+    if (itensNaBuild >= MAX_ITENS_PASSIVOS) {
         return false;
     }
     elo = &inventario->inicio;
@@ -169,7 +189,7 @@ bool equiparItemPassivoBuild(ListaItens *inventario, ListaItens *buildPirata, in
     inventario->tamanho--;
     item->proximo = buildPirata->inicio;
     buildPirata->inicio = item;
-    buildPirata->tamanho++;
+    buildPirata->tamanho = itensNaBuild + 1;
     return true;
 }
 
@@ -196,7 +216,7 @@ bool aplicarItemPassivoNoPirata(ListaItens *inventario, Combatente *pirata, int 
 {
     NoItem *item;
     if (inventario == NULL || pirata == NULL ||
-        pirata->build_passivos.tamanho >= MAX_ITENS_PASSIVOS) {
+        contarItens(&pirata->build_passivos) >= MAX_ITENS_PASSIVOS) {
         return false;
     }
     item = inventario->inicio;
@@ -242,6 +262,7 @@ bool desequiparItemPassivoBuild(ListaItens *inventario, Combatente *pirata, int 
 ListaAlcance *calcularAreaAtuacao3x6(Tabuleiro3x6 *mapa, Combatente *origem, int indiceHabilidade)
 {
     ListaAlcance *lista;
+    Habilidade *habilidade;
     int alcance;
     int linha;
     int coluna;
@@ -249,7 +270,8 @@ ListaAlcance *calcularAreaAtuacao3x6(Tabuleiro3x6 *mapa, Combatente *origem, int
         indiceHabilidade >= origem->habilidades_desbloqueadas) {
         return NULL;
     }
-    alcance = origem->habilidades[indiceHabilidade].alcance;
+    habilidade = &origem->habilidades[indiceHabilidade];
+    alcance = habilidade->alcance;
     lista = calloc(1, sizeof(*lista));
     if (lista == NULL) {
         return NULL;
@@ -257,10 +279,54 @@ ListaAlcance *calcularAreaAtuacao3x6(Tabuleiro3x6 *mapa, Combatente *origem, int
     for (linha = 0; linha < LINHAS_TABULEIRO; linha++) {
         for (coluna = 0; coluna < COLUNAS_TABULEIRO; coluna++) {
             int distancia = abs(linha - origem->linha) + abs(coluna - origem->coluna);
-            if (distancia <= alcance &&
-                (!origem->habilidades[indiceHabilidade].disparo ||
-                 (linha == origem->linha && coluna != origem->coluna)) &&
-                !adicionarCelula(lista, linha, coluna)) {
+            bool dentroAlcance = distancia <= alcance &&
+                                 (!habilidade->disparo ||
+                                  (linha == origem->linha && coluna != origem->coluna));
+            int perigoFogoAmigo = 0;
+            if (mapa->celulas[linha][coluna] != NULL &&
+                mapa->celulas[linha][coluna]->vivo &&
+                mapa->celulas[linha][coluna]->aliado == origem->aliado) {
+                if (habilidade->efeito == EFEITO_BOMBA) {
+                    int centroLinha;
+                    int centroColuna;
+                    for (centroLinha = 0; centroLinha < LINHAS_TABULEIRO && !perigoFogoAmigo;
+                         centroLinha++) {
+                        for (centroColuna = 0; centroColuna < COLUNAS_TABULEIRO;
+                             centroColuna++) {
+                            int distanciaCentro =
+                                abs(centroLinha - origem->linha) +
+                                abs(centroColuna - origem->coluna);
+                            int distanciaExplosao =
+                                abs(linha - centroLinha) + abs(coluna - centroColuna);
+                            if (distanciaCentro <= alcance &&
+                                distanciaExplosao <= habilidade->raio_area) {
+                                perigoFogoAmigo = 1;
+                                break;
+                            }
+                        }
+                    }
+                } else if (habilidade->disparo && linha == origem->linha &&
+                           coluna != origem->coluna) {
+                    int direcao = coluna > origem->coluna ? 1 : -1;
+                    int alvoColuna;
+                    for (alvoColuna = coluna + direcao;
+                     alvoColuna >= 0 && alvoColuna < COLUNAS_TABULEIRO;
+                     alvoColuna += direcao) {
+                    int distanciaAlvo = abs(alvoColuna - origem->coluna);
+                    Combatente *possivelAlvo = mapa->celulas[linha][alvoColuna];
+                    if (distanciaAlvo > alcance) {
+                        break;
+                    }
+                    if (possivelAlvo != NULL && possivelAlvo->vivo &&
+                        possivelAlvo->aliado != origem->aliado) {
+                        perigoFogoAmigo = 1;
+                        break;
+                    }
+                    }
+                }
+            }
+            if ((dentroAlcance || perigoFogoAmigo) &&
+                !adicionarCelula(lista, linha, coluna, perigoFogoAmigo)) {
                 liberarListaAlcance(lista);
                 return NULL;
             }

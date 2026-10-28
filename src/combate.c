@@ -1,9 +1,116 @@
 #include "combate.h"
 
 #include "dados_jogo.h"
+#include "ordenacao.h"
 #include "raylib.h"
 
 #include <stdlib.h>
+
+// Monta a fila da rodada com combatentes vivos ordenados por velocidade.
+int montarFilaTurnos(Tabuleiro3x6 *mapa, Combatente *filaOut[])
+{
+    int linha;
+    int coluna;
+    int totalVivos = 0;
+    if (mapa == NULL || filaOut == NULL) {
+        return 0;
+    }
+    for (linha = 0; linha < LINHAS_TABULEIRO; linha++) {
+        for (coluna = 0; coluna < COLUNAS_TABULEIRO; coluna++) {
+            Combatente *unidade = mapa->celulas[linha][coluna];
+            if (unidade != NULL && unidade->vivo) {
+                filaOut[totalVivos++] = unidade;
+            }
+        }
+    }
+    ordenarFilaPorVelocidade(filaOut, totalVivos);
+    return totalVivos;
+}
+
+// Aplica e consome um item de cura, estamina ou remoção de status.
+bool usarItemConsumivel(Combatente *unidade, Item *item)
+{
+    if (unidade == NULL || item == NULL || !unidade->vivo ||
+        item->tipo != ITEM_CONSUMIVEL || item->quantidade <= 0) {
+        return false;
+    }
+    if (item->efeito_consumivel == CONSUMIVEL_CURAR_VIDA) {
+        if (item->valor_efeito <= 0 || unidade->vida_atual >= unidade->vida_maxima) {
+            return false;
+        }
+        unidade->vida_atual += item->valor_efeito;
+        if (unidade->vida_atual > unidade->vida_maxima) {
+            unidade->vida_atual = unidade->vida_maxima;
+        }
+    } else if (item->efeito_consumivel == CONSUMIVEL_RESTAURAR_ESTAMINA) {
+        if (item->valor_efeito <= 0 || unidade->estamina_atual >= unidade->estamina_maxima) {
+            return false;
+        }
+        unidade->estamina_atual += item->valor_efeito;
+        if (unidade->estamina_atual > unidade->estamina_maxima) {
+            unidade->estamina_atual = unidade->estamina_maxima;
+        }
+    } else if (item->efeito_consumivel == CONSUMIVEL_REMOVER_STATUS) {
+        if (unidade->turnos_veneno <= 0 && unidade->turnos_sangramento <= 0) {
+            return false;
+        }
+        unidade->turnos_veneno = 0;
+        unidade->turnos_sangramento = 0;
+    } else {
+        return false;
+    }
+    item->quantidade--;
+    return true;
+}
+
+// Verifica se uma equipe foi derrotada e informa se os aliados venceram.
+bool verificarFimDeCombate(Tabuleiro3x6 *mapa, bool *vitoriaAliada)
+{
+    int linha;
+    int coluna;
+    bool aliadosVivos = false;
+    bool inimigosVivos = false;
+    if (mapa == NULL || vitoriaAliada == NULL) {
+        return false;
+    }
+    for (linha = 0; linha < LINHAS_TABULEIRO; linha++) {
+        for (coluna = 0; coluna < COLUNAS_TABULEIRO; coluna++) {
+            Combatente *unidade = mapa->celulas[linha][coluna];
+            if (unidade != NULL && unidade->vivo) {
+                if (unidade->aliado) {
+                    aliadosVivos = true;
+                } else {
+                    inimigosVivos = true;
+                }
+            }
+        }
+    }
+    if (aliadosVivos && inimigosVivos) {
+        return false;
+    }
+    *vitoriaAliada = aliadosVivos && !inimigosVivos;
+    return true;
+}
+
+// Avança até a próxima unidade viva que possa agir.
+bool avancarProximoTurno(Combatente *fila[], int totalVivos, int *indiceAtual, Tabuleiro3x6 *mapa)
+{
+    if (fila == NULL || indiceAtual == NULL || mapa == NULL || totalVivos <= 0 ||
+        *indiceAtual < -1 || *indiceAtual >= totalVivos) {
+        return false;
+    }
+    while (++(*indiceAtual) < totalVivos) {
+        Combatente *unidade = fila[*indiceAtual];
+        if (unidade == NULL || !unidade->vivo) {
+            continue;
+        }
+        processarStatusInicioTurno(mapa, unidade);
+        if (unidade->vivo && !unidade->turno_perdido) {
+            return true;
+        }
+    }
+    return false;
+}
 
 // Verifica se uma coordenada pertence ao tabuleiro.
 static bool coordenadaValida(int linha, int coluna)
@@ -73,13 +180,30 @@ static int calcularDanoFinal(Combatente *atacante, const Habilidade *habilidade)
     return dano < 0 ? 0 : dano;
 }
 
-// Posiciona um aliado em uma das duas colunas iniciais do tabuleiro.
+// Posiciona ou troca aliados entre as duas colunas iniciais do tabuleiro.
 bool posicionarPirataPreBatalha(Tabuleiro3x6 *mapa, Combatente *pirata, int linha, int coluna)
 {
+    Combatente *ocupante;
     if (mapa == NULL || pirata == NULL || !pirata->aliado ||
-        !coordenadaValida(linha, coluna) || coluna > 1 ||
-        (mapa->celulas[linha][coluna] != NULL && mapa->celulas[linha][coluna] != pirata)) {
+        !coordenadaValida(linha, coluna) || coluna > 1) {
         return false;
+    }
+    ocupante = mapa->celulas[linha][coluna];
+    if (ocupante != NULL && ocupante != pirata &&
+        (!ocupante->aliado || !coordenadaValida(pirata->linha, pirata->coluna) ||
+         pirata->coluna > 1 || mapa->celulas[pirata->linha][pirata->coluna] != pirata)) {
+        return false;
+    }
+    if (ocupante != NULL && ocupante != pirata) {
+        int linhaAnterior = pirata->linha;
+        int colunaAnterior = pirata->coluna;
+        mapa->celulas[linhaAnterior][colunaAnterior] = ocupante;
+        ocupante->linha = linhaAnterior;
+        ocupante->coluna = colunaAnterior;
+        pirata->linha = linha;
+        pirata->coluna = coluna;
+        mapa->celulas[linha][coluna] = pirata;
+        return true;
     }
     if (coordenadaValida(pirata->linha, pirata->coluna) &&
         mapa->celulas[pirata->linha][pirata->coluna] == pirata) {
@@ -145,6 +269,10 @@ void executarAtaqueOuHabilidade(Tabuleiro3x6 *mapa, Combatente *atacante, int in
         abs(alvoLinha - atacante->linha) + abs(alvoColuna - atacante->coluna) > habilidade->alcance) {
         return;
     }
+    if (habilidade->disparo &&
+        (alvoLinha != atacante->linha || alvoColuna == atacante->coluna)) {
+        return;
+    }
     alvo = mapa->celulas[alvoLinha][alvoColuna];
     if (habilidade->efeito != EFEITO_BOMBA &&
         (alvo == NULL || !alvo->vivo || (alvo->aliado == atacante->aliado &&
@@ -163,7 +291,7 @@ void executarAtaqueOuHabilidade(Tabuleiro3x6 *mapa, Combatente *atacante, int in
         return;
     }
 
-    if (habilidade->efeito == EFEITO_BOMBA && habilidade->raio_area > 0) {
+    if (habilidade->efeito == EFEITO_BOMBA) {
         for (linha = 0; linha < LINHAS_TABULEIRO; linha++) {
             for (coluna = 0; coluna < COLUNAS_TABULEIRO; coluna++) {
                 int distancia = abs(linha - alvoLinha) + abs(coluna - alvoColuna);
@@ -178,17 +306,20 @@ void executarAtaqueOuHabilidade(Tabuleiro3x6 *mapa, Combatente *atacante, int in
         return;
     }
 
-    if (habilidade->disparo && atacante->linha == alvoLinha &&
-        atacante->coluna != alvoColuna) {
+    if (habilidade->disparo) {
         int direcao = alvoColuna > atacante->coluna ? 1 : -1;
-        for (coluna = atacante->coluna + direcao; coluna != alvoColuna; coluna += direcao) {
+        for (coluna = atacante->coluna + direcao;; coluna += direcao) {
             alvo = mapa->celulas[alvoLinha][coluna];
             if (alvo != NULL) {
                 int danoAplicado = alvo->aliado == atacante->aliado ? dano / 2 : dano;
                 aplicarDano(mapa, alvo, danoAplicado);
+                aplicarEfeito(alvo, habilidade->efeito);
+            }
+            if (coluna == alvoColuna) {
                 break;
             }
         }
+        return;
     }
     alvo = mapa->celulas[alvoLinha][alvoColuna];
     if (alvo != NULL) {

@@ -32,6 +32,13 @@ typedef enum {
     EFEITO_VENENO
 } TipoEfeito;
 
+typedef enum {
+    CONSUMIVEL_SEM_EFEITO,
+    CONSUMIVEL_CURAR_VIDA,
+    CONSUMIVEL_RESTAURAR_ESTAMINA,
+    CONSUMIVEL_REMOVER_STATUS
+} TipoEfeitoConsumivel;
+
 typedef struct {
     int id;
     char nome[48];
@@ -41,6 +48,8 @@ typedef struct {
     int bonus_vida;
     int bonus_velocidade;
     int bonus_dano;
+    TipoEfeitoConsumivel efeito_consumivel;
+    int valor_efeito;
 } Item;
 
 typedef struct NoItem {
@@ -102,6 +111,7 @@ typedef struct {
 typedef struct NoCelula {
     int linha;
     int coluna;
+    int perigo_fogo_amigo;
     struct NoCelula *proximo;
 } NoCelula;
 

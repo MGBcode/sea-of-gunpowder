@@ -8,8 +8,7 @@ OBJECTS = $(SOURCES:src/%.c=build/%.o)
 ifeq ($(OS),Windows_NT)
 	SHELL := cmd.exe
 	.SHELLFLAGS := /C
-	CFLAGS += -isystem C:/w64devkit/include -isystem C:/w64devkit/x86_64-w64-mingw32/include
-	LDFLAGS += -LC:/w64devkit/lib -LC:/w64devkit/x86_64-w64-mingw32/lib
+	LDFLAGS += -LC:/w64devkit/lib
 	TARGET = build/jogo.exe
 	LDLIBS += -lopengl32 -lgdi32 -lwinmm -lshell32
 	MKDIR_BUILD = if not exist build mkdir build

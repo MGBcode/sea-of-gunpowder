@@ -17,9 +17,9 @@ typedef struct {
     int pontuacao;
 } CandidatoAcao;
 
-// Ordena os turnos pela velocidade efetiva em ordem decrescente.
+// Ordena por velocidade efetiva decrescente, incluindo Motivação e Veneno.
 void ordenarFilaPorVelocidade(Combatente *fila[], int totalVivos);
-// Ordena candidatos da IA por pontuação decrescente.
+// Ordena candidatos do Tactical Blackboard por pontuação decrescente.
 void ordenarCandidatosIA(CandidatoAcao vetor[], int total);
 
 #endif
