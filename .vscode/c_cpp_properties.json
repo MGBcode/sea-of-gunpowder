@@ -4,8 +4,7 @@
       "name": "Win32",
       "includePath": [
         "${workspaceFolder}/include",
-        "C:/w64devkit/include",
-        "C:/w64devkit/x86_64-w64-mingw32/include"
+        "C:/w64devkit/include"
       ],
       "defines": [
         "_DEBUG",
