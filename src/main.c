@@ -10,26 +10,34 @@ int main(void)
 {
     InterfaceJogo interfaceJogo;
     Tabuleiro3x6 mapa;
-    Combatente pirata;
+    Combatente piratasDisponiveis[5];
+    int totalDisponiveis = 5;
+    int indicePirata;
     int linha;
     int coluna;
     memset(&mapa, 0, sizeof(mapa));
+    memset(piratasDisponiveis, 0, sizeof(piratasDisponiveis));
+    for (indicePirata = 0; indicePirata < totalDisponiveis; indicePirata++) {
+        (void)criarPirataInicial(indicePirata, &piratasDisponiveis[indicePirata]);
+    }
     inicializarInterface(&interfaceJogo);
-    (void)criarPirataInicial(0, &pirata);
-    pirata.linha = 1;
-    pirata.coluna = 0;
-    mapa.celulas[pirata.linha][pirata.coluna] = &pirata;
 
     while (!WindowShouldClose()) {
         if (IsKeyPressed(KEY_ESCAPE)) {
             break;
         }
-        atualizarInterface(&interfaceJogo);
-        desenharInterface(&interfaceJogo, &mapa);
+        atualizarInterface(&interfaceJogo, &mapa, piratasDisponiveis, totalDisponiveis);
+        if (interfaceJogo.estado == ESTADO_SELECAO_GRUPO) {
+            desenharTelaSelecaoGrupo(&interfaceJogo, piratasDisponiveis, totalDisponiveis);
+        } else {
+            desenharInterface(&interfaceJogo, &mapa, NULL);
+        }
     }
 
     encerrarInterface();
-    liberarListaItensCombatente(&pirata.build_passivos);
+    for (indicePirata = 0; indicePirata < totalDisponiveis; indicePirata++) {
+        liberarListaItensCombatente(&piratasDisponiveis[indicePirata].build_passivos);
+    }
     for (linha = 0; linha < LINHAS_TABULEIRO; linha++) {
         for (coluna = 0; coluna < COLUNAS_TABULEIRO; coluna++) {
             mapa.celulas[linha][coluna] = NULL;
@@ -37,4 +45,3 @@ int main(void)
     }
     return 0;
 }
-
