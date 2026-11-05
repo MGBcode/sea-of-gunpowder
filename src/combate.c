@@ -458,7 +458,45 @@ static void obterBonusPassivos(const Combatente *unidade, int *reducao, int *mel
     }
 }
 
-// Calcula o dano inteiro final obedecendo a fórmula padronizada C99 do contrato.
+// Calcula a precisão final do golpe considerando distância, buffs, debuffs e itens.
+static int calcularPrecisaoFinal(const Combatente *atacante, const Habilidade *habilidade,
+                                 int indiceHab, int distOrigem)
+{
+    int reducao;
+    int bonusMelee;
+    int bonusRanged;
+    int bonusPrecisao;
+    int precisao = habilidade->precisao;
+    obterBonusPassivos(atacante, &reducao, &bonusMelee, &bonusRanged, &bonusPrecisao);
+    (void)reducao;
+    (void)bonusMelee;
+    (void)bonusRanged;
+    if (atacante->aliado && atacante->classe == CLASSE_CAPITAO && indiceHab == 0) {
+        precisao = distOrigem == 1 ? 70 : 60;
+    }
+    precisao += bonusPrecisao;
+    if (atacante->aliado && atacante->classe == CLASSE_GAVEA) {
+        int quadradosMaisPerto = 6 - distOrigem;
+        if (quadradosMaisPerto < 1) {
+            quadradosMaisPerto = 1;
+        }
+        precisao += quadradosMaisPerto * 5;
+    }
+    if (atacante->turnos_desmoralizado > 0 || atacante == desmoralizadoAtivoNesteTurno) {
+        precisao = precisao - (precisao * 15) / 100;
+    }
+    if (atacante->motivado_capitao || atacante == motivadoAtivoNesteTurno) {
+        precisao = precisao + (precisao * 20) / 100;
+    }
+    if (precisao < 0) {
+        precisao = 0;
+    } else if (precisao > 100) {
+        precisao = 100;
+    }
+    return precisao;
+}
+
+// Calcula o dano inteiro final (mínimo ou máximo conforme precisão) sem intermediários.
 static int calcularDanoFinal(Tabuleiro3x6 *mapa, Combatente *atacante,
                              Combatente *alvo, const Habilidade *habilidade,
                              int indiceHabilidade, int distancia)
@@ -470,8 +508,8 @@ static int calcularDanoFinal(Tabuleiro3x6 *mapa, Combatente *atacante,
     int melee;
     int ranged;
     int precisao;
+    int precisaoFinal;
     int somaPctBuffs = 0;
-    bool ehCritico;
     bool ataqueRanged = habilidade->tipo_ataque == ATAQUE_RANGED ||
                         habilidade->tipo_ataque == ATAQUE_LINHA ||
                         habilidade->tipo_ataque == ATAQUE_CONE ||
@@ -481,18 +519,19 @@ static int calcularDanoFinal(Tabuleiro3x6 *mapa, Combatente *atacante,
                          distancia > 1);
     if (atacante->aliado && atacante->classe == CLASSE_COZINHEIRO &&
         indiceHabilidade == 1) {
-        danoMin = distancia == 1 ? 30 : 15;
-        danoMax = distancia == 1 ? 40 : 20;
+        danoMax = distancia == 1 ? habilidade->dano_max : habilidade->dano_max / 2;
+        danoMin = distancia == 1 ? (habilidade->dano_max * 3) / 4 : habilidade->dano_min;
     } else if (atacante->aliado && atacante->classe == CLASSE_CAPITAO &&
                indiceHabilidade == 0) {
-        danoMin = distancia == 1 ? 30 : 20;
-        danoMax = distancia == 1 ? 50 : 25;
+        danoMax = distancia == 1 ? habilidade->dano_max : habilidade->dano_max / 2;
+        danoMin = distancia == 1 ? (habilidade->dano_max * 3) / 5 : habilidade->dano_min;
     } else if (!atacante->aliado && atacante->tipo_inimigo == INIMIGO_MARUJO_GORDO &&
                indiceHabilidade == 0 && distancia > 1) {
         danoMin = habilidade->dano_min / 2;
         danoMax = (habilidade->dano_max * 40) / 70;
     }
-    dano = GetRandomValue(danoMin, danoMax);
+    precisaoFinal = calcularPrecisaoFinal(atacante, habilidade, indiceHabilidade, distancia);
+    dano = (GetRandomValue(1, 100) <= precisaoFinal) ? danoMax : danoMin;
     obterBonusPassivos(atacante, &reducao, &melee, &ranged, &precisao);
     (void)reducao;
     (void)precisao;
@@ -500,9 +539,6 @@ static int calcularDanoFinal(Tabuleiro3x6 *mapa, Combatente *atacante,
         somaPctBuffs += ranged;
     } else {
         somaPctBuffs += melee;
-    }
-    if (atacante->aliado && atacante->dano_base > 0) {
-        somaPctBuffs += atacante->dano_base;
     }
     if (atacante->turnos_tonico > 0 || atacante->bonus_tonico_percentual > 0) {
         somaPctBuffs += atacante->bonus_tonico_percentual;
@@ -542,10 +578,6 @@ static int calcularDanoFinal(Tabuleiro3x6 *mapa, Combatente *atacante,
     dano = (dano * (100 + somaPctBuffs)) / 100;
     if (atacante->turnos_veneno > 0 || atacante == venenoAtivoNesteTurno) {
         dano = dano - (dano * 15) / 100;
-    }
-    ehCritico = GetRandomValue(1, 100) <= 10;
-    if (ehCritico) {
-        dano = dano * 2;
     }
     if (dano < 1) {
         dano = 1;
@@ -780,42 +812,6 @@ static bool ataqueValido(const Combatente *atacante, const Habilidade *habilidad
     return true;
 }
 
-// Calcula a precisão final do golpe considerando distância, buffs, debuffs e itens.
-static int calcularPrecisaoFinal(const Combatente *atacante, const Habilidade *habilidade,
-                                 int indiceHab, int distOrigem)
-{
-    int reducao;
-    int bonusMelee;
-    int bonusRanged;
-    int bonusPrecisao;
-    int precisao = habilidade->precisao;
-    obterBonusPassivos(atacante, &reducao, &bonusMelee, &bonusRanged, &bonusPrecisao);
-    (void)reducao;
-    (void)bonusMelee;
-    (void)bonusRanged;
-    if (atacante->aliado && atacante->classe == CLASSE_CAPITAO && indiceHab == 0) {
-        precisao = distOrigem == 1 ? atacante->precisao_melee : atacante->precisao_ranged;
-    }
-    precisao += bonusPrecisao;
-    if (atacante->aliado && atacante->classe == CLASSE_GAVEA) {
-        int quadradosMaisPerto = 6 - distOrigem;
-        if (quadradosMaisPerto < 1) {
-            quadradosMaisPerto = 1;
-        }
-        precisao += quadradosMaisPerto * 5;
-    }
-    if (atacante->turnos_desmoralizado > 0 || atacante == desmoralizadoAtivoNesteTurno) {
-        precisao = precisao - (precisao * 15) / 100;
-    }
-    if (atacante->motivado_capitao || atacante == motivadoAtivoNesteTurno) {
-        precisao = precisao + (precisao * 20) / 100;
-    }
-    if (precisao > 100) {
-        precisao = 100;
-    }
-    return precisao;
-}
-
 // Executa o Avanço Impetuoso do Bucaneiro seguindo os 4 passos do Edge Case 1.
 static void executarAvancoImpetuoso(Tabuleiro3x6 *mapa, Combatente *atacante,
                                     const Habilidade *habilidade, int indiceHab,
@@ -836,7 +832,8 @@ static void executarAvancoImpetuoso(Tabuleiro3x6 *mapa, Combatente *atacante,
         int celLin = origLin + dist * dirLinha;
         int celCol = origCol + dist * dirColuna;
         Combatente *alvo;
-        int precisao;
+        int dano;
+        int danoCausado;
         if (!coordenadaValida(celLin, celCol)) {
             continue;
         }
@@ -847,12 +844,9 @@ static void executarAvancoImpetuoso(Tabuleiro3x6 *mapa, Combatente *atacante,
         if (alvo == NULL || !alvo->vivo || alvo->aliado == atacante->aliado) {
             continue;
         }
-        precisao = calcularPrecisaoFinal(atacante, habilidade, indiceHab, dist);
-        if (precisao >= 0 && GetRandomValue(1, 100) <= precisao) {
-            int dano = calcularDanoFinal(mapa, atacante, alvo, habilidade, indiceHab, dist);
-            int danoCausado = aplicarDano(mapa, atacante, alvo, dano, false);
-            curaRouboVida += danoCausado / 2;
-        }
+        dano = calcularDanoFinal(mapa, atacante, alvo, habilidade, indiceHab, dist);
+        danoCausado = aplicarDano(mapa, atacante, alvo, dano, false);
+        curaRouboVida += danoCausado / 2;
     }
     if (curaRouboVida > 0 && atacante->vivo) {
         atacante->vida_atual += curaRouboVida;
@@ -998,8 +992,7 @@ void executarAtaqueOuHabilidade(Tabuleiro3x6 *mapa, Combatente *atacante, int in
                 continue;
             }
             alvosAtingidos++;
-            precisao = calcularPrecisaoFinal(atacante, habilidade, indiceHab, passo);
-            if (precisao >= 0 && GetRandomValue(1, 100) <= precisao) {
+            {
                 int dano = calcularDanoFinal(mapa, atacante, alvoLinhaAtual,
                                              habilidade, indiceHab, passo);
                 (void)aplicarDano(mapa, atacante, alvoLinhaAtual, dano,
@@ -1007,6 +1000,7 @@ void executarAtaqueOuHabilidade(Tabuleiro3x6 *mapa, Combatente *atacante, int in
                 aplicarEfeito(mapa, atacante, alvoLinhaAtual, habilidade, indiceHab,
                               dirAxialLinha, dirAxialColuna);
             }
+            (void)precisao;
             if (alvosAtingidos >= limiteAlvos || !atacante->vivo) {
                 break;
             }
@@ -1032,8 +1026,6 @@ void executarAtaqueOuHabilidade(Tabuleiro3x6 *mapa, Combatente *atacante, int in
         for (coluna = 0; coluna < COLUNAS_TABULEIRO; coluna++) {
             int distOrigem = distanciaEntre(linha, coluna, atacante->linha, atacante->coluna);
             Combatente *alvoCelula;
-            int precisao;
-            bool acertou = true;
             if (area) {
                 if (!habilidadeAfetaCelula(habilidade, atacante, alvoLinha,
                                            alvoColuna, linha, coluna)) {
@@ -1061,17 +1053,6 @@ void executarAtaqueOuHabilidade(Tabuleiro3x6 *mapa, Combatente *atacante, int in
             } else if (alvoCelula->aliado == atacante->aliado && !habilidade->fogo_amigo &&
                        habilidade->efeito != EFEITO_MOTIVACAO &&
                        habilidade->efeito != EFEITO_VENENO) {
-                continue;
-            }
-            if (habilidade->efeito != EFEITO_CURA &&
-                habilidade->efeito != EFEITO_CURA_CONTINUA &&
-                !(alvoCelula->aliado == atacante->aliado &&
-                  (habilidade->efeito == EFEITO_MOTIVACAO ||
-                   habilidade->efeito == EFEITO_VENENO))) {
-                precisao = calcularPrecisaoFinal(atacante, habilidade, indiceHab, distOrigem);
-                acertou = precisao >= 0 && GetRandomValue(1, 100) <= precisao;
-            }
-            if (!acertou) {
                 continue;
             }
             if (habilidade->dano_max > 0 &&

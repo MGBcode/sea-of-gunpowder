@@ -82,7 +82,7 @@ bool criarPirataInicial(int indice, Combatente *destino)
         { 4, 5, 5, 6, 6, 6 },
         { 5, 6, 6, 8, 8, 8 },
         { 5, 6, 6, 7, 7, 7 },
-        { 3, 4, 4, 5, 5, 5 }
+        { 5, 6, 6, 7, 7, 7 }
     };
     int nivel;
     if (destino == NULL || indice < 0 || indice >= TOTAL_PIRATAS_PREDEFINIDOS) {
@@ -243,21 +243,15 @@ int carregarItensIniciais(Item itens[], int capacidade)
     return total;
 }
 
-// Evolui níveis aplicando ganho de atributos (+5% a +10% conforme classe) e desbloqueios.
+// Evolui níveis aplicando ganho de +20% de vida e +20% de dano de ataque por nível.
 bool subirNivelPirata(Combatente *unidade, int niveisGanhos)
 {
-    static const int ganhoVidaPct[TOTAL_PIRATAS_PREDEFINIDOS] = { 6, 10, 8, 8, 5 };
-    static const int ganhoDanoPct[TOTAL_PIRATAS_PREDEFINIDOS] = { 10, 6, 6, 8, 10 };
     int passo;
     int bonusColar = 0;
-    int classeIndice;
+    int habIndice;
     NoItem *item;
     if (unidade == NULL || niveisGanhos < 0 || unidade->nivel < 1) {
         return false;
-    }
-    classeIndice = (int)unidade->classe;
-    if (classeIndice < 0 || classeIndice >= TOTAL_PIRATAS_PREDEFINIDOS) {
-        classeIndice = 0;
     }
     for (item = unidade->build_passivos.inicio; item != NULL; item = item->proximo) {
         if (item->item.id == 10) {
@@ -265,22 +259,41 @@ bool subirNivelPirata(Combatente *unidade, int niveisGanhos)
         }
     }
     for (passo = 0; passo < niveisGanhos; passo++) {
-        int aumentoVida = (unidade->vida_maxima * ganhoVidaPct[classeIndice]) / 100;
-        int aumentoDano = ganhoDanoPct[classeIndice];
-        int nivelNovo = unidade->nivel < 6 ? unidade->nivel + 1 : 6;
-        int indiceTabela = nivelNovo - 1;
-        int estaminaNova = unidade->estamina_por_nivel[indiceTabela] + bonusColar;
+        int aumentoVida;
+        int nivelNovo;
+        int indiceTabela;
+        int estaminaNova;
         int estaminaBonus;
+        if (unidade->nivel >= 6) {
+            break;
+        }
+        aumentoVida = (unidade->vida_maxima * 20) / 100;
         if (aumentoVida < 1) {
             aumentoVida = 1;
         }
+        nivelNovo = unidade->nivel + 1;
+        indiceTabela = nivelNovo - 1;
+        estaminaNova = unidade->estamina_por_nivel[indiceTabela] + bonusColar;
         unidade->nivel = nivelNovo;
         unidade->vida_maxima += aumentoVida;
         unidade->vida_atual += aumentoVida;
         if (unidade->vida_atual > unidade->vida_maxima) {
             unidade->vida_atual = unidade->vida_maxima;
         }
-        unidade->dano_base += aumentoDano;
+        unidade->dano_base += 20;
+        for (habIndice = 0; habIndice < MAX_HABILIDADES; habIndice++) {
+            if (unidade->habilidades[habIndice].efeito != EFEITO_CURA &&
+                unidade->habilidades[habIndice].efeito != EFEITO_CURA_CONTINUA) {
+                if (unidade->habilidades[habIndice].dano_min > 0) {
+                    unidade->habilidades[habIndice].dano_min +=
+                        (unidade->habilidades[habIndice].dano_min * 20) / 100;
+                }
+                if (unidade->habilidades[habIndice].dano_max > 0) {
+                    unidade->habilidades[habIndice].dano_max +=
+                        (unidade->habilidades[habIndice].dano_max * 20) / 100;
+                }
+            }
+        }
         estaminaBonus = estaminaNova - unidade->estamina_maxima;
         if (estaminaBonus > 0) {
             unidade->estamina_maxima = estaminaNova;
@@ -328,6 +341,7 @@ static bool adicionarItemInventario(ListaItens *inventario, int id, int quantida
     NoItem *novo;
     int total;
     int indice;
+    int copia;
     if (inventario == NULL || quantidade <= 0) {
         return false;
     }
@@ -344,16 +358,28 @@ static bool adicionarItemInventario(ListaItens *inventario, int id, int quantida
                 return true;
             }
         }
+        novo = malloc(sizeof(*novo));
+        if (novo == NULL) {
+            return false;
+        }
+        novo->item = catalogo[indice];
+        novo->item.quantidade = quantidade;
+        novo->proximo = inventario->inicio;
+        inventario->inicio = novo;
+        inventario->tamanho++;
+        return true;
     }
-    novo = malloc(sizeof(*novo));
-    if (novo == NULL) {
-        return false;
+    for (copia = 0; copia < quantidade; copia++) {
+        novo = malloc(sizeof(*novo));
+        if (novo == NULL) {
+            return false;
+        }
+        novo->item = catalogo[indice];
+        novo->item.quantidade = 1;
+        novo->proximo = inventario->inicio;
+        inventario->inicio = novo;
+        inventario->tamanho++;
     }
-    novo->item = catalogo[indice];
-    novo->item.quantidade = quantidade;
-    novo->proximo = inventario->inicio;
-    inventario->inicio = novo;
-    inventario->tamanho++;
     return true;
 }
 

@@ -3,6 +3,7 @@
 #include "combate.h"
 #include "dados_jogo.h"
 #include "ia_inimigos.h"
+#include "ordenacao.h"
 #include "raylib.h"
 
 #include <stdio.h>
@@ -56,8 +57,20 @@ static bool testarClassesEMecanicasCombate(void)
         capitao.vida_maxima != 120 || capitao.velocidade != 7 ||
         capitao.precisao_melee != 70 || capitao.precisao_ranged != 60 ||
         gavea.vida_maxima != 70 || gavea.velocidade != 5 ||
-        gavea.precisao_melee != 40 || gavea.estamina_maxima != 3) {
+        gavea.precisao_melee != 40 || gavea.estamina_maxima != 5) {
         fprintf(stderr, "Falha sanitaria: atributos base dos 5 piratas incorretos.\n");
+        return false;
+    }
+
+    (void)subirNivelPirata(&gavea, 1);
+    if (gavea.nivel != 2 || gavea.estamina_maxima != 6 || gavea.vida_maxima != 84 ||
+        gavea.habilidades[0].dano_min != 24 || gavea.habilidades[0].dano_max != 48) {
+        fprintf(stderr, "Falha sanitaria: Gavea Nv 2 (estamina 6 e +20%% vida/dano).\n");
+        return false;
+    }
+    (void)subirNivelPirata(&gavea, 2);
+    if (gavea.nivel != 4 || gavea.estamina_maxima != 7) {
+        fprintf(stderr, "Falha sanitaria: Gavea Nv 4 deve ter 7 de estamina.\n");
         return false;
     }
 
@@ -220,6 +233,8 @@ static bool testarClassesEMecanicasCombate(void)
     (void)criarInimigoInicial(INIMIGO_GRUNT_ESPADA, &inimigoA);
     (void)criarInimigoInicial(INIMIGO_GRUNT_ESPADA, &inimigoB);
     (void)criarInimigoInicial(INIMIGO_GRUNT_ESPADA, &inimigoC);
+    inimigoA.vida_maxima = 500;
+    inimigoA.vida_atual = 500;
     inimigoA.linha = 1;
     inimigoA.coluna = 2;
     inimigoB.linha = 1;
@@ -582,6 +597,156 @@ static bool executarTestesSanitarios(void)
     if (!testarClassesEMecanicasCombate() || !testarReposicaoTripulacaoPosFuga()) {
         goto limpeza;
     }
+    {
+        Tabuleiro3x6 mapaTeste;
+        Combatente gruntPistola;
+        Combatente alvoTeste;
+        Combatente pA;
+        Combatente pB;
+        Combatente pC;
+        Combatente pD;
+        Combatente pE;
+        EntradaIniciativa filaOrd[5];
+        ListaItens mochilaTeste = { NULL, 0 };
+        int iter;
+        int contMin = 0;
+        int contMax = 0;
+        int vx = 0;
+        int vy = 0;
+
+        (void)memset(&mapaTeste, 0, sizeof(mapaTeste));
+        (void)criarInimigoInicial(INIMIGO_GRUNT_PISTOLA, &gruntPistola);
+        (void)criarPirataInicial(CLASSE_TIMONEIRO, &alvoTeste);
+        gruntPistola.habilidades[0].dano_min = 30;
+        gruntPistola.habilidades[0].dano_max = 40;
+        gruntPistola.linha = 1;
+        gruntPistola.coluna = 4;
+        alvoTeste.linha = 1;
+        alvoTeste.coluna = 1;
+        mapaTeste.celulas[1][4] = &gruntPistola;
+        mapaTeste.celulas[1][1] = &alvoTeste;
+
+        gruntPistola.precisao_ranged = 0;
+        gruntPistola.habilidades[0].precisao = 0;
+        for (iter = 0; iter < 30; iter++) {
+            int vidaAntes = 200;
+            int danoCausado;
+            alvoTeste.vida_maxima = 200;
+            alvoTeste.vida_atual = vidaAntes;
+            gruntPistola.estamina_atual = gruntPistola.estamina_maxima;
+            executarAtaqueOuHabilidade(&mapaTeste, &gruntPistola, 0, 1, 1);
+            danoCausado = vidaAntes - alvoTeste.vida_atual;
+            if (danoCausado != 30) {
+                fprintf(stderr, "Falha sanitaria: precisao 0%% deve causar dano minimo (30), causou %d.\n", danoCausado);
+                goto limpeza;
+            }
+        }
+        gruntPistola.precisao_ranged = 100;
+        gruntPistola.habilidades[0].precisao = 100;
+        for (iter = 0; iter < 30; iter++) {
+            int vidaAntes = 200;
+            int danoCausado;
+            alvoTeste.vida_maxima = 200;
+            alvoTeste.vida_atual = vidaAntes;
+            gruntPistola.estamina_atual = gruntPistola.estamina_maxima;
+            executarAtaqueOuHabilidade(&mapaTeste, &gruntPistola, 0, 1, 1);
+            danoCausado = vidaAntes - alvoTeste.vida_atual;
+            if (danoCausado != 40) {
+                fprintf(stderr, "Falha sanitaria: precisao 100%% deve causar dano maximo (40), causou %d.\n", danoCausado);
+                goto limpeza;
+            }
+        }
+        gruntPistola.precisao_ranged = 60;
+        gruntPistola.habilidades[0].precisao = 60;
+        for (iter = 0; iter < 120; iter++) {
+            int vidaAntes = 200;
+            int danoCausado;
+            alvoTeste.vida_maxima = 200;
+            alvoTeste.vida_atual = vidaAntes;
+            gruntPistola.estamina_atual = gruntPistola.estamina_maxima;
+            executarAtaqueOuHabilidade(&mapaTeste, &gruntPistola, 0, 1, 1);
+            danoCausado = vidaAntes - alvoTeste.vida_atual;
+            if (danoCausado == 30) {
+                contMin++;
+            } else if (danoCausado == 40) {
+                contMax++;
+            } else {
+                fprintf(stderr, "Falha sanitaria: precisao 60%% causou valor intermediario ou erro (%d).\n", danoCausado);
+                goto limpeza;
+            }
+        }
+        if (contMin == 0 || contMax == 0) {
+            fprintf(stderr, "Falha sanitaria: distribuicao de precisao 60%% invalida.\n");
+            goto limpeza;
+        }
+
+        (void)criarPirataInicial(CLASSE_BUCANEIRO, &pA);
+        (void)criarPirataInicial(CLASSE_CAPITAO, &pB);
+        (void)criarInimigoInicial(INIMIGO_GRUNT_ESPADA, &pC);
+        (void)criarPirataInicial(CLASSE_TIMONEIRO, &pD);
+        (void)criarPirataInicial(CLASSE_COZINHEIRO, &pE);
+        pA.vida_atual = 80;
+        pA.estamina_atual = 4;
+        pB.vida_atual = 50;
+        pB.estamina_atual = 4;
+        pC.vida_atual = 10;
+        pC.estamina_atual = 9;
+        pD.vida_atual = 80;
+        pD.estamina_atual = 7;
+        pE.vida_atual = 90;
+        pE.estamina_atual = 9;
+        filaOrd[0].ator = &pC;
+        filaOrd[0].velocidade_efetiva = 7;
+        filaOrd[1].ator = &pA;
+        filaOrd[1].velocidade_efetiva = 7;
+        filaOrd[2].ator = &pB;
+        filaOrd[2].velocidade_efetiva = 7;
+        filaOrd[3].ator = &pD;
+        filaOrd[3].velocidade_efetiva = 7;
+        filaOrd[4].ator = &pE;
+        filaOrd[4].velocidade_efetiva = 9;
+        ordenarFilaPorVelocidade(filaOrd, 5);
+        if (filaOrd[0].ator != &pE || filaOrd[1].ator != &pB ||
+            filaOrd[2].ator != &pD || filaOrd[3].ator != &pA ||
+            filaOrd[4].ator != &pC) {
+            fprintf(stderr, "Falha sanitaria: desempate de velocidade (vel > jogavel > menos vida > mais estamina).\n");
+            goto limpeza;
+        }
+
+        if (!carregarInventarioSanitario(&mochilaTeste, &itens[4], 1) ||
+            mochilaTeste.tamanho != 1 ||
+            !aplicarItemPassivoNoPirata(&mochilaTeste, &pA, itens[4].id) ||
+            mochilaTeste.tamanho != 0 || pA.build_passivos.tamanho != 1 ||
+            !desequiparItemPassivoBuild(&mochilaTeste, &pA, itens[4].id) ||
+            mochilaTeste.tamanho != 1 || pA.build_passivos.tamanho != 0 ||
+            !aplicarItemPassivoNoPirata(&mochilaTeste, &pB, itens[4].id) ||
+            mochilaTeste.tamanho != 0 || pB.build_passivos.tamanho != 1) {
+            fprintf(stderr, "Falha sanitaria: troca de item passivo entre mochila e personagens.\n");
+            liberarListaItensCombatente(&pA.build_passivos);
+            liberarListaItensCombatente(&pB.build_passivos);
+            liberarEstruturasJogo(NULL, &mochilaTeste, NULL);
+            goto limpeza;
+        }
+        liberarListaItensCombatente(&pA.build_passivos);
+        liberarListaItensCombatente(&pB.build_passivos);
+        liberarEstruturasJogo(NULL, &mochilaTeste, NULL);
+
+        converterCoordenadaMouseVirtual(960, 540, 1920, 1080, &vx, &vy);
+        if (vx != 640 || vy != 360) {
+            fprintf(stderr, "Falha sanitaria: escala virtual em tela cheia 1920x1080.\n");
+            goto limpeza;
+        }
+        converterCoordenadaMouseVirtual(1919, 1008, 1920, 1009, &vx, &vy);
+        if (vx != 1279 || vy != 719) {
+            fprintf(stderr, "Falha sanitaria: escala virtual em janela maximizada 1920x1009.\n");
+            goto limpeza;
+        }
+        converterCoordenadaMouseVirtual(1280, 720, 2560, 1440, &vx, &vy);
+        if (vx != 640 || vy != 360) {
+            fprintf(stderr, "Falha sanitaria: escala virtual em 2560x1440.\n");
+            goto limpeza;
+        }
+    }
     sucesso = true;
     puts("Testes sanitarios de classes, mecanicas, reposicao pos-fuga, IA e estruturas aprovados.");
 
@@ -591,14 +756,6 @@ limpeza:
     }
     liberarListaItensCombatente(&boss.build_passivos);
     return sucesso;
-}
-
-// Carrega os itens iniciais no inventário de jogo.
-static bool carregarInventarioInicial(ListaItens *inventario)
-{
-    Item itens[TOTAL_ITENS_PREDEFINIDOS];
-    int total = carregarItensIniciais(itens, TOTAL_ITENS_PREDEFINIDOS);
-    return carregarInventarioSanitario(inventario, itens, total);
 }
 
 // Inicia os testes e executa o ciclo principal da interface Raylib.
@@ -626,7 +783,7 @@ int main(int argc, char *argv[])
     moedasTripulacao = 300;
     raizRotas = construirArvoreRotas(nivelDificuldade);
     rotaAtual = raizRotas;
-    if (raizRotas == NULL || !carregarInventarioInicial(&inventario)) {
+    if (raizRotas == NULL) {
         fprintf(stderr, "Falha ao inicializar a aventura.\n");
         liberarEstruturasJogo(raizRotas, &inventario, NULL);
         return 1;

@@ -85,6 +85,10 @@ void desenharTelaSelecaoGrupo(InterfaceJogo *interfaceJogo,
 // Desenha o estado atual, tabuleiro interativo e pop-up ativo.
 void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *mapa,
                        const ListaAlcance *alcance);
+// Converte coordenadas reais da janela/tela cheia para a resolução virtual 1280x720.
+bool converterCoordenadaMouseVirtual(float mouseRealX, float mouseRealY,
+                                     int larguraJanela, int alturaJanela,
+                                     int *virtualX, int *virtualY);
 // Processa a desistência, reseta piratas mortos ao nível 1 e solicita reposição.
 void processarFugaETrocaTripulacao(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
                                    Combatente piratasDisponiveis[], int totalDisponiveis);
