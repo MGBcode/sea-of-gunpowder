@@ -3,34 +3,36 @@
 #include "raylib.h"
 
 #include <limits.h>
-#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
 static Tabuleiro3x6 *mapaReservas;
 static bool reservasStun[LINHAS_TABULEIRO][COLUNAS_TABULEIRO];
 
-// Calcula a resposta de uma curva para uma entrada normalizada entre zero e um.
-static double aplicarCurvaResposta(CurvaRespostaIA curva, double valor)
+// Calcula uma curva matemática de resposta (0 a 100) usando aritmética 100% inteira.
+static int aplicarCurvaResposta(CurvaRespostaIA curva, int valorPercentual)
 {
-    if (valor < 0.0) {
-        valor = 0.0;
-    } else if (valor > 1.0) {
-        valor = 1.0;
+    if (valorPercentual < 0) {
+        valorPercentual = 0;
+    } else if (valorPercentual > 100) {
+        valorPercentual = 100;
     }
     if (curva == CURVE_INVERSE) {
-        return 1.0 / (1.0 + 4.0 * valor);
+        return 10000 / (100 + 4 * valorPercentual);
     }
     if (curva == CURVE_EXPONENTIAL) {
-        return exp(-4.0 * valor);
+        return ((100 - valorPercentual) * (100 - valorPercentual)) / 100;
     }
     if (curva == CURVE_LOGISTIC) {
-        return 1.0 / (1.0 + exp(8.0 * (valor - 0.5)));
+        if (valorPercentual <= 50) {
+            return 100 - (2 * valorPercentual * valorPercentual) / 100;
+        }
+        return (2 * (100 - valorPercentual) * (100 - valorPercentual)) / 100;
     }
-    return valor;
+    return valorPercentual;
 }
 
-// Atualiza reservas compartilhadas de stun e os alvos aliados vivos.
+// Atualiza reservas compartilhadas de stun e os alvos aliados vivos no Blackboard.
 void atualizarTacticalBlackboard(TacticalBlackboard *blackboard, Tabuleiro3x6 *mapa,
                                  Combatente *inimigo)
 {
@@ -70,18 +72,20 @@ void atualizarTacticalBlackboard(TacticalBlackboard *blackboard, Tabuleiro3x6 *m
     }
 }
 
-// Pontua a prioridade de um alvo com base em vida e distância Manhattan.
+// Pontua a prioridade tática de um alvo com base em curva de vida e distância Manhattan.
 static int pontuarAlvo(const Combatente *inimigo, const Combatente *alvo)
 {
     int distancia = abs(inimigo->linha - alvo->linha) + abs(inimigo->coluna - alvo->coluna);
-    int pontuacao = 100 - alvo->vida_atual + 20 - distancia * 3;
+    int pctVida = alvo->vida_maxima > 0 ? (alvo->vida_atual * 100) / alvo->vida_maxima : 100;
+    int urgenciaAlvo = aplicarCurvaResposta(CURVE_EXPONENTIAL, pctVida);
+    int pontuacao = 30 + urgenciaAlvo + 20 - distancia * 4;
     if (pontuacao < 1) {
         pontuacao = 1;
     }
     return pontuacao;
 }
 
-// Insere uma ação positiva sem exceder a capacidade do vetor de candidatos.
+// Insere uma ação candidata positiva sem exceder a capacidade do vetor.
 static void adicionarCandidato(CandidatoAcao candidatos[], int *total,
                                TipoAcaoIA tipo, int linha, int coluna,
                                int habilidade, int pontuacao)
@@ -97,18 +101,106 @@ static void adicionarCandidato(CandidatoAcao candidatos[], int *total,
     (*total)++;
 }
 
-// Estima o dano líquido de uma habilidade contra um alvo.
+// Estima o dano médio líquido de uma habilidade contra um alvo.
 static int estimarDano(const Combatente *inimigo, const Combatente *alvo,
-                       const Habilidade *habilidade)
+                       const Habilidade *habilidade, int indiceHab, int distancia)
 {
-    int dano = inimigo->dano_base + habilidade->dano - alvo->defesa;
-    if (inimigo->turnos_veneno > 0) {
-        dano -= (dano * 15) / 100;
+    int danoMin = habilidade->dano_min;
+    int danoMax = habilidade->dano_max;
+    int dano;
+    if (inimigo->tipo_inimigo == INIMIGO_MARUJO_GORDO && indiceHab == 0 && distancia > 1) {
+        danoMin = habilidade->dano_min / 2;
+        danoMax = (habilidade->dano_max * 40) / 70;
+    }
+    dano = inimigo->dano_base + (danoMin + danoMax) / 2 - alvo->defesa;
+    if (inimigo->eh_boss && inimigo->fase_boss == 2) {
+        if (indiceHab == 0) {
+            dano = (dano * 115) / 100;
+        } else if (indiceHab == 1) {
+            dano = (dano * 120) / 100;
+        }
     }
     return dano < 1 ? 1 : dano;
 }
 
-// Gera ações candidatas, ordena-as e escolhe uma entre as melhores ponderadamente.
+// Calibra o bônus tático conforme o arquétipo do inimigo ou a fase do Barba Negra.
+static int calibrarBonusArquetipo(const Tabuleiro3x6 *mapa, const Combatente *inimigo,
+                                  const Combatente *alvo, const Habilidade *habilidade,
+                                  int indiceHab, int distancia)
+{
+    int bonus = 0;
+    int linha;
+    int coluna;
+    if (inimigo->tipo_inimigo == INIMIGO_GRUNT_ESPADA) {
+        bonus += alvo->golpes_corte_grunt_recebidos * 25;
+    } else if (inimigo->tipo_inimigo == INIMIGO_GRUNT_PISTOLA) {
+        if (indiceHab == 0) {
+            int dirLin = alvo->linha > inimigo->linha ? 1 : (alvo->linha < inimigo->linha ? -1 : 0);
+            int dirCol = alvo->coluna > inimigo->coluna ? 1 : (alvo->coluna < inimigo->coluna ? -1 : 0);
+            int passo;
+            for (passo = 1; passo <= habilidade->alcance; passo++) {
+                int celLin = inimigo->linha + passo * dirLin;
+                int celCol = inimigo->coluna + passo * dirCol;
+                if (celLin >= 0 && celLin < LINHAS_TABULEIRO &&
+                    celCol >= 0 && celCol < COLUNAS_TABULEIRO &&
+                    mapa->celulas[celLin][celCol] != NULL &&
+                    mapa->celulas[celLin][celCol]->vivo) {
+                    if (mapa->celulas[celLin][celCol]->aliado == inimigo->aliado) {
+                        bonus -= 45;
+                    } else if (mapa->celulas[celLin][celCol] != alvo) {
+                        bonus += 30;
+                    }
+                }
+            }
+        } else if (indiceHab == 1) {
+            for (linha = 0; linha < LINHAS_TABULEIRO; linha++) {
+                for (coluna = 0; coluna < COLUNAS_TABULEIRO; coluna++) {
+                    if (abs(linha - alvo->linha) + abs(coluna - alvo->coluna) <= 1 &&
+                        mapa->celulas[linha][coluna] != NULL &&
+                        mapa->celulas[linha][coluna]->vivo) {
+                        if (mapa->celulas[linha][coluna]->aliado == inimigo->aliado) {
+                            bonus -= 40;
+                        } else if (mapa->celulas[linha][coluna] != alvo) {
+                            bonus += 35;
+                        }
+                    }
+                }
+            }
+        }
+    } else if (inimigo->tipo_inimigo == INIMIGO_ATIRADOR_MAGRELO) {
+        int pctVida = alvo->vida_maxima > 0 ? (alvo->vida_atual * 100) / alvo->vida_maxima : 100;
+        bonus += aplicarCurvaResposta(CURVE_LOGISTIC, pctVida) / 2;
+        if (distancia >= 3) {
+            bonus += 20;
+        }
+    } else if (inimigo->tipo_inimigo == INIMIGO_MARUJO_GORDO) {
+        if (indiceHab == 0 && distancia == 1) {
+            bonus += 35;
+        }
+    } else if (inimigo->eh_boss) {
+        if (indiceHab == 0 && inimigo->fase_boss == 2 && alvo->turnos_veneno <= 0) {
+            bonus += 35;
+        } else if (indiceHab == 2) {
+            int colunaExtra = alvo->coluna >= inimigo->coluna ? 1 : -1;
+            int piratasNaArea = 0;
+            for (linha = 0; linha < LINHAS_TABULEIRO; linha++) {
+                for (coluna = 0; coluna < COLUNAS_TABULEIRO; coluna++) {
+                    if (abs(linha - alvo->linha) <= 1 &&
+                        (coluna == alvo->coluna || coluna == alvo->coluna + colunaExtra) &&
+                        mapa->celulas[linha][coluna] != NULL &&
+                        mapa->celulas[linha][coluna]->vivo &&
+                        mapa->celulas[linha][coluna]->aliado != inimigo->aliado) {
+                        piratasNaArea++;
+                    }
+                }
+            }
+            bonus += (piratasNaArea - 1) * 45;
+        }
+    }
+    return bonus;
+}
+
+// Gera ações candidatas, ordena-as com Insertion Sort e escolhe no Top-3 ponderado.
 bool selecionarAcaoIA(Tabuleiro3x6 *mapa, Combatente *inimigo, CandidatoAcao *escolha)
 {
     TacticalBlackboard blackboard = { 0 };
@@ -122,8 +214,7 @@ bool selecionarAcaoIA(Tabuleiro3x6 *mapa, Combatente *inimigo, CandidatoAcao *es
     int pesoTotal = 0;
     int sorteio;
     bool alvoAoAlcance = false;
-    int velocidadeEfetiva;
-    int passoMaximo;
+    int penalidadeDesmoralizado;
     if (mapa == NULL || inimigo == NULL || escolha == NULL || !inimigo->vivo) {
         return false;
     }
@@ -132,6 +223,7 @@ bool selecionarAcaoIA(Tabuleiro3x6 *mapa, Combatente *inimigo, CandidatoAcao *es
     if (habilidades > MAX_HABILIDADES) {
         habilidades = MAX_HABILIDADES;
     }
+    penalidadeDesmoralizado = inimigo->turnos_desmoralizado > 0 ? 1 : 0;
     for (indice = 0; indice < habilidades; indice++) {
         if (inimigo->turnos_desde_uso[indice] >= 0 &&
             inimigo->turnos_desde_uso[indice] < INT_MAX) {
@@ -140,18 +232,57 @@ bool selecionarAcaoIA(Tabuleiro3x6 *mapa, Combatente *inimigo, CandidatoAcao *es
     }
     for (indice = 0; indice < habilidades; indice++) {
         Habilidade *habilidade = &inimigo->habilidades[indice];
+        int custoReal = habilidade->custo_estamina + penalidadeDesmoralizado;
         int alvoIndice;
+        if (habilidade->custo_estamina < 0 || inimigo->estamina_atual < custoReal) {
+            continue;
+        }
+        if (habilidade->efeito == EFEITO_CURA_CONTINUA) {
+            int linha;
+            int coluna;
+            for (linha = 0; linha < LINHAS_TABULEIRO; linha++) {
+                for (coluna = 0; coluna < COLUNAS_TABULEIRO; coluna++) {
+                    Combatente *aliadoFerido = mapa->celulas[linha][coluna];
+                    int distAliado;
+                    int pctVidaAliado;
+                    int urgenciaCura;
+                    if (aliadoFerido == NULL || aliadoFerido == inimigo ||
+                        !aliadoFerido->vivo || aliadoFerido->aliado != inimigo->aliado ||
+                        aliadoFerido->vida_atual >= aliadoFerido->vida_maxima ||
+                        aliadoFerido->turnos_cura_hot > 0) {
+                        continue;
+                    }
+                    distAliado = abs(inimigo->linha - linha) + abs(inimigo->coluna - coluna);
+                    if (distAliado <= habilidade->alcance) {
+                        pctVidaAliado = (aliadoFerido->vida_atual * 100) /
+                                        aliadoFerido->vida_maxima;
+                        urgenciaCura = aplicarCurvaResposta(CURVE_INVERSE, pctVidaAliado);
+                        adicionarCandidato(candidatos, &total, ACAO_IA_HABILIDADE,
+                                           linha, coluna, indice, 70 + urgenciaCura);
+                    }
+                }
+            }
+            continue;
+        }
+        if (habilidade->efeito == EFEITO_CURA || habilidade->efeito == EFEITO_MOTIVACAO) {
+            continue;
+        }
         for (alvoIndice = 0; alvoIndice < blackboard.total_alvos; alvoIndice++) {
             Combatente *alvo = blackboard.alvos[alvoIndice];
             int distancia = abs(inimigo->linha - alvo->linha) +
                             abs(inimigo->coluna - alvo->coluna);
+            bool exigeAlinhamento = habilidade->tipo_ataque == ATAQUE_MELEE ||
+                                    habilidade->tipo_ataque == ATAQUE_LINHA ||
+                                    habilidade->tipo_ataque == ATAQUE_DASH_CARDEAL ||
+                                    habilidade->tipo_ataque == ATAQUE_AREA_1X3;
             int dano;
             int pontuacao;
-            if (distancia > habilidade->alcance) {
+            if (habilidade->tipo_ataque != ATAQUE_AREA_3X2 &&
+                (distancia <= 0 || distancia > habilidade->alcance)) {
                 continue;
             }
-            if (habilidade->custo_estamina < 0 ||
-                inimigo->estamina_atual < habilidade->custo_estamina) {
+            if (exigeAlinhamento &&
+                alvo->linha != inimigo->linha && alvo->coluna != inimigo->coluna) {
                 continue;
             }
             if (habilidade->efeito == EFEITO_ESTUNAR &&
@@ -160,8 +291,10 @@ bool selecionarAcaoIA(Tabuleiro3x6 *mapa, Combatente *inimigo, CandidatoAcao *es
                 continue;
             }
             alvoAoAlcance = true;
-            dano = estimarDano(inimigo, alvo, habilidade);
+            dano = estimarDano(inimigo, alvo, habilidade, indice, distancia);
             pontuacao = 40 + pontuarAlvo(inimigo, alvo) + dano / 2;
+            pontuacao += calibrarBonusArquetipo(mapa, inimigo, alvo, habilidade,
+                                                indice, distancia);
             if (dano >= alvo->vida_atual) {
                 pontuacao += 100;
             }
@@ -182,35 +315,40 @@ bool selecionarAcaoIA(Tabuleiro3x6 *mapa, Combatente *inimigo, CandidatoAcao *es
                                alvo->linha, alvo->coluna, indice, pontuacao);
         }
     }
-    if (!alvoAoAlcance && blackboard.linha_aliado_mais_fraco >= 0) {
+    if ((!alvoAoAlcance || (inimigo->eh_boss && mapa->boss_fase_2_ativa)) &&
+        blackboard.linha_aliado_mais_fraco >= 0 && inimigo->estamina_atual >= 1) {
         int linha;
         int coluna;
         Combatente *alvo = mapa->celulas[blackboard.linha_aliado_mais_fraco]
                                         [blackboard.coluna_aliado_mais_fraco];
         int distanciaAtual = abs(inimigo->linha - alvo->linha) +
                              abs(inimigo->coluna - alvo->coluna);
-        velocidadeEfetiva = inimigo->velocidade;
-        if (inimigo->turnos_motivacao > 0) {
-            velocidadeEfetiva += 2;
-        }
-        if (inimigo->turnos_veneno > 0) {
-            velocidadeEfetiva -= 3;
-        }
-        passoMaximo = velocidadeEfetiva >= 7 ? 2 : 1;
+        bool usaAtaqueLinha = inimigo->habilidades[0].tipo_ataque == ATAQUE_LINHA;
         for (linha = 0; linha < LINHAS_TABULEIRO; linha++) {
             for (coluna = 0; coluna < COLUNAS_TABULEIRO; coluna++) {
-                int custo = abs(linha - inimigo->linha) + abs(coluna - inimigo->coluna);
+                int passoDist = abs(linha - inimigo->linha) + abs(coluna - inimigo->coluna);
                 int distanciaNova;
                 int pontuacao;
-                if (custo < 1 || custo > passoMaximo || custo > inimigo->estamina_atual ||
-                    mapa->celulas[linha][coluna] != NULL) {
+                bool alinhaTiro;
+                if (passoDist != 1 || mapa->celulas[linha][coluna] != NULL ||
+                    mapa->mina_ativa[linha][coluna] > 0) {
                     continue;
                 }
                 distanciaNova = abs(linha - alvo->linha) + abs(coluna - alvo->coluna);
-                if (distanciaNova >= distanciaAtual) {
+                alinhaTiro = usaAtaqueLinha &&
+                             (linha == alvo->linha || coluna == alvo->coluna) &&
+                             distanciaNova <= inimigo->habilidades[0].alcance;
+                if (distanciaNova >= distanciaAtual && !alinhaTiro) {
                     continue;
                 }
-                pontuacao = 40 + (distanciaAtual - distanciaNova) * 30 - distanciaNova * 2;
+                pontuacao = 45 + (distanciaAtual - distanciaNova) * 30 - distanciaNova * 2;
+                if (alinhaTiro) {
+                    pontuacao += 35;
+                }
+                if (inimigo->eh_boss && mapa->boss_fase_2_ativa &&
+                    (mapa->turnos_boss_fase_2 + 1) % 2 == 0) {
+                    pontuacao += 40;
+                }
                 adicionarCandidato(candidatos, &total, ACAO_IA_MOVER,
                                    linha, coluna, -1, pontuacao);
             }
@@ -218,14 +356,16 @@ bool selecionarAcaoIA(Tabuleiro3x6 *mapa, Combatente *inimigo, CandidatoAcao *es
     }
     if (inimigo->estamina_atual <= 1 ||
         (total == 0 && inimigo->estamina_atual < inimigo->estamina_maxima)) {
-        double proporcao = inimigo->estamina_maxima > 0
-                               ? (double)inimigo->estamina_atual / inimigo->estamina_maxima
-                               : 0.0;
-        double resposta = (aplicarCurvaResposta(CURVE_INVERSE, proporcao) +
-                           aplicarCurvaResposta(CURVE_EXPONENTIAL, proporcao)) / 2.0;
-        int pontuacaoDescanso = (int)(100.0 * resposta);
+        int proporcao = inimigo->estamina_maxima > 0
+                            ? (inimigo->estamina_atual * 100) / inimigo->estamina_maxima
+                            : 0;
+        int resposta = (aplicarCurvaResposta(CURVE_INVERSE, proporcao) +
+                        aplicarCurvaResposta(CURVE_EXPONENTIAL, proporcao)) / 2;
+        if (resposta < 1) {
+            resposta = 1;
+        }
         adicionarCandidato(candidatos, &total, ACAO_IA_DESCANSAR,
-                           inimigo->linha, inimigo->coluna, -1, pontuacaoDescanso);
+                           inimigo->linha, inimigo->coluna, -1, resposta);
     }
     if (total == 0) {
         return false;
@@ -233,7 +373,7 @@ bool selecionarAcaoIA(Tabuleiro3x6 *mapa, Combatente *inimigo, CandidatoAcao *es
     ordenarCandidatosIA(candidatos, total);
     limite = total < 3 ? total : 3;
     melhorPontuacao = candidatos[0].pontuacao;
-    margem = melhorPontuacao * 20 / 100;
+    margem = (melhorPontuacao * 20) / 100;
     for (indice = 0; indice < limite && candidatos[indice].pontuacao >=
                                             melhorPontuacao - margem; indice++) {
         pesoTotal += candidatos[indice].pontuacao;

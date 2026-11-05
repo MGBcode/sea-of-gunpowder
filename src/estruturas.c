@@ -1,5 +1,7 @@
 #include "estruturas.h"
 
+#include "dados_jogo.h"
+
 #include <stdlib.h>
 
 // Libera todos os nós de uma árvore ternária.
@@ -140,23 +142,13 @@ NoRota *avancarParaRota(NoRota *noAtual, int escolha)
     return NULL;
 }
 
-// Encerra a aventura, libera suas rotas e reinicia a dificuldade.
+// Encerra a aventura, apaga o inventário solto e incrementa a dificuldade.
 NoRota *fugirDaAventura(NoRota *raiz, ListaItens *inventarioGeral, int *nivelDificuldade)
 {
-    NoItem **elo;
     liberarArvoreRotas(raiz);
+    contadorFugas++;
     if (inventarioGeral != NULL) {
-        elo = &inventarioGeral->inicio;
-        while (*elo != NULL) {
-            NoItem *item = *elo;
-            if (item->item.tipo == ITEM_CONSUMIVEL || item->item.tipo == ITEM_ATIVO) {
-                *elo = item->proximo;
-                free(item);
-                inventarioGeral->tamanho--;
-            } else {
-                elo = &item->proximo;
-            }
-        }
+        liberarListaItens(inventarioGeral);
     }
     if (nivelDificuldade != NULL) {
         (*nivelDificuldade)++;
@@ -200,6 +192,10 @@ static void alterarAtributosItem(Combatente *pirata, const Item *item, int fator
     pirata->vida_atual += fator * item->bonus_vida;
     pirata->velocidade += fator * item->bonus_velocidade;
     pirata->dano_base += fator * item->bonus_dano;
+    pirata->estamina_maxima += fator * item->bonus_estamina;
+    pirata->estamina_atual += fator * item->bonus_estamina;
+    pirata->precisao_melee += fator * item->bonus_precisao;
+    pirata->precisao_ranged += fator * item->bonus_precisao;
     if (pirata->vida_maxima < 1) {
         pirata->vida_maxima = 1;
     }
@@ -208,6 +204,15 @@ static void alterarAtributosItem(Combatente *pirata, const Item *item, int fator
     }
     if (pirata->vida_atual < 0) {
         pirata->vida_atual = 0;
+    }
+    if (pirata->estamina_maxima < 1) {
+        pirata->estamina_maxima = 1;
+    }
+    if (pirata->estamina_atual > pirata->estamina_maxima) {
+        pirata->estamina_atual = pirata->estamina_maxima;
+    }
+    if (pirata->estamina_atual < 0) {
+        pirata->estamina_atual = 0;
     }
 }
 
@@ -258,75 +263,140 @@ bool desequiparItemPassivoBuild(ListaItens *inventario, Combatente *pirata, int 
     return true;
 }
 
-// Lista as células do tabuleiro dentro do alcance da habilidade escolhida.
+// Verifica se uma célula fica dentro do efeito centrado no alvo indicado.
+static bool celulaNaArea(const Habilidade *habilidade, const Combatente *origem,
+                         int alvoLinha, int alvoColuna, int linha, int coluna)
+{
+    int deltaLinha = alvoLinha - origem->linha;
+    int deltaColuna = alvoColuna - origem->coluna;
+    if (linha == alvoLinha && coluna == alvoColuna) {
+        return true;
+    }
+    if (habilidade->tipo_ataque == ATAQUE_LINHA ||
+        habilidade->tipo_ataque == ATAQUE_DASH_CARDEAL) {
+        return (alvoLinha == origem->linha && linha == origem->linha &&
+                (coluna - origem->coluna) * deltaColuna > 0 &&
+                abs(coluna - origem->coluna) <= habilidade->alcance) ||
+               (alvoColuna == origem->coluna && coluna == origem->coluna &&
+                (linha - origem->linha) * deltaLinha > 0 &&
+                abs(linha - origem->linha) <= habilidade->alcance);
+    }
+    if (habilidade->tipo_ataque == ATAQUE_CONE) {
+        if (abs(deltaLinha) > abs(deltaColuna)) {
+            int sinalLinha = deltaLinha > 0 ? 1 : -1;
+            int passoLinha = (linha - origem->linha) * sinalLinha;
+            return passoLinha >= 1 && passoLinha <= habilidade->alcance &&
+                   abs(coluna - origem->coluna) < passoLinha;
+        }
+        if (deltaColuna != 0) {
+            int sinalColuna = deltaColuna > 0 ? 1 : -1;
+            int passoColuna = (coluna - origem->coluna) * sinalColuna;
+            return passoColuna >= 1 && passoColuna <= habilidade->alcance &&
+                   abs(linha - origem->linha) < passoColuna;
+        }
+        return false;
+    }
+    if (habilidade->tipo_ataque == ATAQUE_CRUZ) {
+        return abs(linha - alvoLinha) + abs(coluna - alvoColuna) <= 1;
+    }
+    if (habilidade->tipo_ataque == ATAQUE_AREA_1X3) {
+        if (abs(deltaLinha) > abs(deltaColuna)) {
+            return linha == alvoLinha && abs(coluna - alvoColuna) <= 1;
+        }
+        return coluna == alvoColuna && abs(linha - alvoLinha) <= 1;
+    }
+    if (habilidade->tipo_ataque == ATAQUE_AREA_2X3) {
+        int linhaExtra = (alvoLinha == LINHAS_TABULEIRO - 1) ? -1 :
+                         ((alvoLinha == 0) ? 1 : (deltaLinha >= 0 ? 1 : -1));
+        return (linha == alvoLinha || linha == alvoLinha + linhaExtra ||
+                linha == origem->linha) &&
+               abs(coluna - alvoColuna) <= 1;
+    }
+    if (habilidade->tipo_ataque == ATAQUE_AREA_3X2) {
+        int colunaExtra = (alvoColuna == COLUNAS_TABULEIRO - 1) ? -1 :
+                          ((alvoColuna == 0) ? 1 : (deltaColuna >= 0 ? 1 : -1));
+        return linha >= 0 && linha < LINHAS_TABULEIRO &&
+               (coluna == alvoColuna || coluna == alvoColuna + colunaExtra);
+    }
+    return false;
+}
+
+// Lista as células selecionáveis e os aliados ameaçados por ataque em área.
 ListaAlcance *calcularAreaAtuacao3x6(Tabuleiro3x6 *mapa, Combatente *origem, int indiceHabilidade)
 {
     ListaAlcance *lista;
     Habilidade *habilidade;
-    int alcance;
+    bool alcancavel[LINHAS_TABULEIRO][COLUNAS_TABULEIRO] = { { false } };
+    bool perigoso[LINHAS_TABULEIRO][COLUNAS_TABULEIRO] = { { false } };
+    int alvoLinha;
+    int alvoColuna;
     int linha;
     int coluna;
-    if (mapa == NULL || origem == NULL || indiceHabilidade < 0 ||
-        indiceHabilidade >= origem->habilidades_desbloqueadas) {
+    if (mapa == NULL || origem == NULL || origem->linha < 0 ||
+        origem->linha >= LINHAS_TABULEIRO || origem->coluna < 0 ||
+        origem->coluna >= COLUNAS_TABULEIRO || indiceHabilidade < 0 ||
+        indiceHabilidade >= origem->habilidades_desbloqueadas ||
+        indiceHabilidade >= MAX_HABILIDADES) {
         return NULL;
     }
     habilidade = &origem->habilidades[indiceHabilidade];
-    alcance = habilidade->alcance;
+    for (alvoLinha = 0; alvoLinha < LINHAS_TABULEIRO; alvoLinha++) {
+        for (alvoColuna = 0; alvoColuna < COLUNAS_TABULEIRO; alvoColuna++) {
+            int deltaLinha = alvoLinha - origem->linha;
+            int deltaColuna = alvoColuna - origem->coluna;
+            int distancia = abs(deltaLinha) + abs(deltaColuna);
+            bool cardinal = alvoLinha == origem->linha || alvoColuna == origem->coluna;
+            bool permitePropriaCelula = habilidade->efeito == EFEITO_CURA ||
+                                        habilidade->efeito == EFEITO_MOTIVACAO ||
+                                        habilidade->efeito == EFEITO_VENENO;
+            bool dentroAlcance = (permitePropriaCelula ? distancia >= 0 : distancia > 0) &&
+                                 distancia <= habilidade->alcance;
+            if (habilidade->tipo_ataque == ATAQUE_LINHA ||
+                habilidade->tipo_ataque == ATAQUE_DASH_CARDEAL ||
+                habilidade->tipo_ataque == ATAQUE_AREA_1X3 ||
+                habilidade->tipo_ataque == ATAQUE_MELEE) {
+                dentroAlcance = distancia > 0 && distancia <= habilidade->alcance && cardinal;
+            } else if (habilidade->tipo_ataque == ATAQUE_CONE) {
+                bool coneVertical = abs(deltaLinha) >= 1 &&
+                                    abs(deltaLinha) <= habilidade->alcance &&
+                                    abs(deltaColuna) < abs(deltaLinha);
+                bool coneHorizontal = abs(deltaColuna) >= 1 &&
+                                      abs(deltaColuna) <= habilidade->alcance &&
+                                      abs(deltaLinha) < abs(deltaColuna);
+                dentroAlcance = coneVertical || coneHorizontal;
+            } else if (habilidade->tipo_ataque == ATAQUE_AREA_2X3 ||
+                       habilidade->tipo_ataque == ATAQUE_AREA_3X2) {
+                dentroAlcance = habilidade->alcance >= 5 ||
+                                ((permitePropriaCelula ? distancia >= 0 : distancia > 0) &&
+                                 distancia <= habilidade->alcance);
+            }
+            if (dentroAlcance) {
+                alcancavel[alvoLinha][alvoColuna] = true;
+                for (linha = 0; linha < LINHAS_TABULEIRO; linha++) {
+                    for (coluna = 0; coluna < COLUNAS_TABULEIRO; coluna++) {
+                        Combatente *unidade = mapa->celulas[linha][coluna];
+                        if (unidade != NULL && unidade->vivo &&
+                            unidade->aliado == origem->aliado &&
+                            habilidade->efeito != EFEITO_CURA &&
+                            habilidade->efeito != EFEITO_MOTIVACAO &&
+                            habilidade->efeito != EFEITO_VENENO &&
+                            celulaNaArea(habilidade, origem, alvoLinha, alvoColuna,
+                                         linha, coluna)) {
+                            perigoso[linha][coluna] = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
     lista = calloc(1, sizeof(*lista));
     if (lista == NULL) {
         return NULL;
     }
     for (linha = 0; linha < LINHAS_TABULEIRO; linha++) {
         for (coluna = 0; coluna < COLUNAS_TABULEIRO; coluna++) {
-            int distancia = abs(linha - origem->linha) + abs(coluna - origem->coluna);
-            bool dentroAlcance = distancia <= alcance &&
-                                 (!habilidade->disparo ||
-                                  (linha == origem->linha && coluna != origem->coluna));
-            int perigoFogoAmigo = 0;
-            if (mapa->celulas[linha][coluna] != NULL &&
-                mapa->celulas[linha][coluna]->vivo &&
-                mapa->celulas[linha][coluna]->aliado == origem->aliado) {
-                if (habilidade->efeito == EFEITO_BOMBA) {
-                    int centroLinha;
-                    int centroColuna;
-                    for (centroLinha = 0; centroLinha < LINHAS_TABULEIRO && !perigoFogoAmigo;
-                         centroLinha++) {
-                        for (centroColuna = 0; centroColuna < COLUNAS_TABULEIRO;
-                             centroColuna++) {
-                            int distanciaCentro =
-                                abs(centroLinha - origem->linha) +
-                                abs(centroColuna - origem->coluna);
-                            int distanciaExplosao =
-                                abs(linha - centroLinha) + abs(coluna - centroColuna);
-                            if (distanciaCentro <= alcance &&
-                                distanciaExplosao <= habilidade->raio_area) {
-                                perigoFogoAmigo = 1;
-                                break;
-                            }
-                        }
-                    }
-                } else if (habilidade->disparo && linha == origem->linha &&
-                           coluna != origem->coluna) {
-                    int direcao = coluna > origem->coluna ? 1 : -1;
-                    int alvoColuna;
-                    for (alvoColuna = coluna + direcao;
-                     alvoColuna >= 0 && alvoColuna < COLUNAS_TABULEIRO;
-                     alvoColuna += direcao) {
-                    int distanciaAlvo = abs(alvoColuna - origem->coluna);
-                    Combatente *possivelAlvo = mapa->celulas[linha][alvoColuna];
-                    if (distanciaAlvo > alcance) {
-                        break;
-                    }
-                    if (possivelAlvo != NULL && possivelAlvo->vivo &&
-                        possivelAlvo->aliado != origem->aliado) {
-                        perigoFogoAmigo = 1;
-                        break;
-                    }
-                    }
-                }
-            }
-            if ((dentroAlcance || perigoFogoAmigo) &&
-                !adicionarCelula(lista, linha, coluna, perigoFogoAmigo)) {
+            if ((alcancavel[linha][coluna] || perigoso[linha][coluna]) &&
+                !adicionarCelula(lista, linha, coluna, perigoso[linha][coluna] ? 1 : 0)) {
                 liberarListaAlcance(lista);
                 return NULL;
             }

@@ -3,6 +3,14 @@
 
 #include "estruturas.h"
 
+#define MAX_ENTRADAS_INICIATIVA (LINHAS_TABULEIRO * COLUNAS_TABULEIRO + 2)
+
+typedef struct {
+    Combatente *ator;
+    int velocidade_efetiva;
+    int indice_turno_boss;
+} EntradaIniciativa;
+
 typedef enum {
     ACAO_IA_HABILIDADE = 0,
     ACAO_IA_MOVER = 1,
@@ -17,8 +25,8 @@ typedef struct {
     int pontuacao;
 } CandidatoAcao;
 
-// Ordena por velocidade efetiva decrescente, incluindo Motivação e Veneno.
-void ordenarFilaPorVelocidade(Combatente *fila[], int totalVivos);
+// Ordena entradas de iniciativa por velocidade efetiva decrescente.
+void ordenarFilaPorVelocidade(EntradaIniciativa fila[], int total);
 // Ordena candidatos do Tactical Blackboard por pontuação decrescente.
 void ordenarCandidatosIA(CandidatoAcao vetor[], int total);
 
