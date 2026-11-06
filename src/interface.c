@@ -402,7 +402,7 @@ static void executarPassoTurnoInimigo(InterfaceJogo *interfaceJogo, Tabuleiro3x6
         inimigo->acoes_basicas_restantes = 0;
         interfaceJogo->linha_destaque_acao = inimigo->linha;
         interfaceJogo->coluna_destaque_acao = inimigo->coluna;
-        interfaceJogo->timer_destaque_acao = 0.50f;
+        interfaceJogo->timer_destaque_acao = 1.0f;
         (void)snprintf(interfaceJogo->log_combate, sizeof(interfaceJogo->log_combate),
                        "ACAO INIMIGA: %s entrou em Descanso em (%d,%d).",
                        inimigo->nome, inimigo->linha, inimigo->coluna);
@@ -424,7 +424,7 @@ static void executarPassoTurnoInimigo(InterfaceJogo *interfaceJogo, Tabuleiro3x6
         inimigo->acoes_basicas_restantes--;
         interfaceJogo->linha_destaque_acao = escolha.linha_alvo;
         interfaceJogo->coluna_destaque_acao = escolha.coluna_alvo;
-        interfaceJogo->timer_destaque_acao = 0.55f;
+        interfaceJogo->timer_destaque_acao = 1.0f;
         if (alvo != NULL && danoCausado > 0) {
             (void)snprintf(interfaceJogo->log_combate, sizeof(interfaceJogo->log_combate),
                            "ACAO INIMIGA: %s usou %s em %s (-%d PV)!",
@@ -454,7 +454,7 @@ static void executarPassoTurnoInimigo(InterfaceJogo *interfaceJogo, Tabuleiro3x6
             inimigo->acoes_basicas_restantes--;
             interfaceJogo->linha_destaque_acao = escolha.linha_alvo;
             interfaceJogo->coluna_destaque_acao = escolha.coluna_alvo;
-            interfaceJogo->timer_destaque_acao = 0.50f;
+            interfaceJogo->timer_destaque_acao = 1.0f;
             (void)snprintf(interfaceJogo->log_combate, sizeof(interfaceJogo->log_combate),
                            "ACAO INIMIGA: %s moveu de (%d,%d) para (%d,%d).",
                            inimigo->nome, origLin, origCol,
@@ -464,7 +464,7 @@ static void executarPassoTurnoInimigo(InterfaceJogo *interfaceJogo, Tabuleiro3x6
             inimigo->acoes_basicas_restantes = 0;
             interfaceJogo->linha_destaque_acao = inimigo->linha;
             interfaceJogo->coluna_destaque_acao = inimigo->coluna;
-            interfaceJogo->timer_destaque_acao = 0.45f;
+            interfaceJogo->timer_destaque_acao = 1.0f;
             (void)snprintf(interfaceJogo->log_combate, sizeof(interfaceJogo->log_combate),
                            "ACAO INIMIGA: %s encerrou o turno em (%d,%d).",
                            inimigo->nome, inimigo->linha, inimigo->coluna);
@@ -476,7 +476,7 @@ static void executarPassoTurnoInimigo(InterfaceJogo *interfaceJogo, Tabuleiro3x6
     if (verificarResultadoBatalha(interfaceJogo, mapa, piratas, totalPiratas)) {
         return;
     }
-    interfaceJogo->timer_turno_inimigo = 0.45f;
+    interfaceJogo->timer_turno_inimigo = 1.0f;
 }
 
 // Avança a fila de iniciativa e prepara o turno do próximo aliado ou inimigo.
@@ -529,8 +529,8 @@ static void avancarIniciativa(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
         interfaceJogo->coluna_origem_acao = interfaceJogo->ator_atual->coluna;
         interfaceJogo->linha_destaque_acao = interfaceJogo->ator_atual->linha;
         interfaceJogo->coluna_destaque_acao = interfaceJogo->ator_atual->coluna;
-        interfaceJogo->timer_destaque_acao = 0.45f;
-        interfaceJogo->timer_turno_inimigo = 0.40f;
+        interfaceJogo->timer_destaque_acao = 1.0f;
+        interfaceJogo->timer_turno_inimigo = 1.0f;
         (void)snprintf(interfaceJogo->log_combate, sizeof(interfaceJogo->log_combate),
                        "VEZ DO INIMIGO: %s preparando acao...",
                        interfaceJogo->ator_atual->nome);
@@ -687,14 +687,15 @@ void inicializarInterface(InterfaceJogo *interfaceJogo)
     interfaceJogo->coluna_destaque_acao = -1;
     interfaceJogo->linha_origem_acao = -1;
     interfaceJogo->coluna_origem_acao = -1;
-    interfaceJogo->largura_celula = 130;
-    interfaceJogo->altura_celula = 130;
-    interfaceJogo->margem_esquerda = 80;
+    interfaceJogo->largura_celula = 180;
+    interfaceJogo->altura_celula = 148;
+    interfaceJogo->margem_esquerda = 100;
     interfaceJogo->margem_superior = 130;
     interfaceJogo->pirata_posicionando_indice = -1;
     interfaceJogo->indice_iniciativa = -1;
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(LARGURA_VIRTUAL, ALTURA_VIRTUAL, "Cronicas de Sangue e Polvora");
+    SetExitKey(KEY_NULL);
     SetWindowMinSize(960, 540);
     SetTargetFPS(60);
     canvasVirtual = LoadRenderTexture(LARGURA_VIRTUAL, ALTURA_VIRTUAL);
@@ -718,7 +719,7 @@ void inicializarInterface(InterfaceJogo *interfaceJogo)
     }
 }
 
-// Processa menus, pop-ups com toggle no botão ativador, rotas e ações de combate.
+// Processa menus, menu de pause (ESC), pop-ups, rotas e ações de combate.
 void atualizarInterface(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
                         Combatente piratasDisponiveis[], int totalDisponiveis,
                         NoRota **raizRotas, NoRota **rotaAtual,
@@ -737,6 +738,14 @@ void atualizarInterface(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
     interfaceJogo->inventario = inventario;
     interfaceJogo->moedas = moedas;
     interfaceJogo->nivel_dificuldade = nivelDificuldade;
+    if (interfaceJogo->estado != TELA_MENU_PRINCIPAL && IsKeyPressed(KEY_ESCAPE)) {
+        if (interfaceJogo->popup_ativo == POPUP_PAUSE) {
+            interfaceJogo->popup_ativo = POPUP_NENHUM;
+        } else {
+            interfaceJogo->popup_ativo = POPUP_PAUSE;
+        }
+        return;
+    }
     deltaTempo = GetFrameTime();
     if (deltaTempo <= 0.0f || deltaTempo > 0.25f) {
         deltaTempo = 0.016f;
@@ -761,11 +770,24 @@ void atualizarInterface(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
     }
     mouse = obterMouseVirtual();
     if (interfaceJogo->popup_ativo != POPUP_NENHUM) {
+        if (interfaceJogo->popup_ativo == POPUP_PAUSE) {
+            if (retanguloClicado((Rectangle){ 490, 300, 300, 58 }, mouse)) {
+                interfaceJogo->popup_ativo = POPUP_NENHUM;
+                return;
+            }
+            if (retanguloClicado((Rectangle){ 490, 380, 300, 58 }, mouse)) {
+                reiniciarPartidaCompleta(interfaceJogo, mapa, piratasDisponiveis,
+                                         totalDisponiveis, raizRotas, rotaAtual,
+                                         inventario, moedas, nivelDificuldade);
+                interfaceJogo->estado = TELA_MENU_PRINCIPAL;
+                return;
+            }
+            return;
+        }
         if (interfaceJogo->popup_ativo == POPUP_DETALHES_PERSONAGEM) {
             bool clicouBotaoAtivador =
                 (interfaceJogo->estado == TELA_MAPA_ROTAS &&
-                 (retanguloClicado((Rectangle){ 1070, 80, 170, 42 }, mouse) ||
-                  retanguloClicado((Rectangle){ 510, 630, 190, 55 }, mouse))) ||
+                 retanguloClicado((Rectangle){ 510, 630, 190, 55 }, mouse)) ||
                 (interfaceJogo->estado == TELA_COMBATE_3X6 &&
                  retanguloClicado((Rectangle){ 975, 630, 130, 55 }, mouse));
             if (interfaceJogo->estado == TELA_SELECAO_TRIPULACAO) {
@@ -1018,8 +1040,7 @@ void atualizarInterface(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
             interfaceJogo->popup_ativo = POPUP_CONFIRMAR_FUGA;
             return;
         }
-        if (retanguloClicado((Rectangle){ 1070, 80, 170, 42 }, mouse) ||
-            retanguloClicado((Rectangle){ 510, 630, 190, 55 }, mouse)) {
+        if (retanguloClicado((Rectangle){ 510, 630, 190, 55 }, mouse)) {
             if (interfaceJogo->entidade_selecionada == NULL &&
                 interfaceJogo->total_selecionados > 0) {
                 interfaceJogo->entidade_selecionada =
@@ -1185,6 +1206,82 @@ void atualizarInterface(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
     }
 }
 
+// Retorna o nome do pirata pelo seu ID fixo de classe (1 a 5).
+static const char *nomePirataPorId(int idPirata)
+{
+    static const char *nomes[5] = {
+        "Bucaneiro", "Timoneiro", "Cozinheiro", "Capitao", "Gavea"
+    };
+    if (idPirata >= 1 && idPirata <= 5) {
+        return nomes[idPirata - 1];
+    }
+    return "Pirata";
+}
+
+// Desenha selos visuais coloridos de buffs e debuffs ativos em uma unidade.
+static void desenharIndicadoresStatusUnidade(const Combatente *unidade, int xBase, int yBase,
+                                             int larguraMax)
+{
+    int posX = xBase;
+    int posY = yBase;
+    const char *textos[8];
+    Color cores[8];
+    int total = 0;
+    int indice;
+    if (unidade == NULL || !unidade->vivo) {
+        return;
+    }
+    if (unidade->turnos_motivacao > 0 && total < 8) {
+        textos[total] = TextFormat("+MOT %dt", unidade->turnos_motivacao);
+        cores[total++] = (Color){ 45, 175, 95, 255 };
+    }
+    if (unidade->turnos_tonico > 0 && total < 8) {
+        textos[total] = TextFormat("+ATK %dt", unidade->turnos_tonico);
+        cores[total++] = (Color){ 55, 150, 235, 255 };
+    }
+    if (unidade->turnos_cura_hot > 0 && total < 8) {
+        textos[total] = TextFormat("+HOT %dt", unidade->turnos_cura_hot);
+        cores[total++] = (Color){ 45, 195, 125, 255 };
+    }
+    if (unidade->turnos_sangramento > 0 && total < 8) {
+        textos[total] = TextFormat("SANGR %dt", unidade->turnos_sangramento);
+        cores[total++] = (Color){ 210, 45, 45, 255 };
+    } else if (unidade->golpes_corte_bucaneiro_recebidos > 0 && total < 8) {
+        textos[total] = TextFormat("CORTE %d/2", unidade->golpes_corte_bucaneiro_recebidos);
+        cores[total++] = (Color){ 195, 95, 45, 255 };
+    } else if (unidade->golpes_corte_grunt_recebidos > 0 && total < 8) {
+        textos[total] = TextFormat("CORTE %d/3", unidade->golpes_corte_grunt_recebidos);
+        cores[total++] = (Color){ 195, 95, 45, 255 };
+    }
+    if (unidade->turnos_veneno > 0 && total < 8) {
+        textos[total] = TextFormat("VEN %dt", unidade->turnos_veneno);
+        cores[total++] = (Color){ 155, 65, 215, 255 };
+    }
+    if (unidade->turnos_atordoado > 0 && total < 8) {
+        textos[total] = TextFormat("STUN %dt", unidade->turnos_atordoado);
+        cores[total++] = (Color){ 225, 145, 30, 255 };
+    }
+    if (unidade->turnos_desnorteado > 0 && total < 8) {
+        textos[total] = TextFormat("-VEL %dt", unidade->turnos_desnorteado);
+        cores[total++] = (Color){ 205, 115, 40, 255 };
+    }
+    if (unidade->turnos_desmoralizado > 0 && total < 8) {
+        textos[total] = TextFormat("-DESM %dt", unidade->turnos_desmoralizado);
+        cores[total++] = (Color){ 185, 70, 90, 255 };
+    }
+    for (indice = 0; indice < total; indice++) {
+        int largBadge = 66;
+        if (posX + largBadge > xBase + larguraMax) {
+            posX = xBase;
+            posY += 20;
+        }
+        DrawRectangle(posX, posY, largBadge, 17, cores[indice]);
+        DrawRectangleLines(posX, posY, largBadge, 17, RAYWHITE);
+        desenharTexto(textos[indice], posX + 4, posY + 2, 11, RAYWHITE);
+        posX += largBadge + 4;
+    }
+}
+
 // Retorna o texto da passiva de classe (Nv 1 ou Nv 4) para o painel de inspeção.
 static const char *descricaoPassiva(ClassePirata classe, bool aprimorada)
 {
@@ -1248,6 +1345,21 @@ static const char *descricaoItemCatalogo(int idItem)
     }
 }
 
+// Desenha o menu de pause acionado pela tecla ESC com opções Retornar e Voltar ao Menu.
+static void desenharMenuPause(void)
+{
+    DrawRectangle(0, 0, LARGURA_VIRTUAL, ALTURA_VIRTUAL, (Color){ 6, 10, 15, 195 });
+    DrawRectangle(420, 190, 440, 290, (Color){ 15, 24, 34, 252 });
+    DrawRectangleLinesEx((Rectangle){ 420.0f, 190.0f, 440.0f, 290.0f }, 3.0f, GOLD);
+    desenharTexto("JOGO PAUSADO", 535, 225, 28, GOLD);
+    DrawRectangle(490, 300, 300, 58, (Color){ 45, 125, 70, 255 });
+    DrawRectangleLines(490, 300, 300, 58, RAYWHITE);
+    desenharTexto("RETORNAR", 582, 318, 20, RAYWHITE);
+    DrawRectangle(490, 380, 300, 58, (Color){ 145, 48, 38, 255 });
+    DrawRectangleLines(490, 380, 300, 58, RAYWHITE);
+    desenharTexto("VOLTAR AO MENU", 545, 398, 20, RAYWHITE);
+}
+
 // Desenha a ficha completa de status, passivas, ataques e build da entidade inspecionada.
 static void desenharDetalhes(const Combatente *unidade)
 {
@@ -1278,11 +1390,8 @@ static void desenharDetalhes(const Combatente *unidade)
                              unidade->precisao_melee, unidade->precisao_ranged,
                              unidade->dano_base),
                   185, 170, 15, LIGHTGRAY);
-    desenharTexto(TextFormat("Status: Sangr %dt | Veneno %dt | Stun %dt | Motivado %dt | Desnort %dt",
-                             unidade->turnos_sangramento, unidade->turnos_veneno,
-                             unidade->turnos_atordoado, unidade->turnos_motivacao,
-                             unidade->turnos_desnorteado),
-                  185, 196, 14, GOLD);
+    desenharTexto("EFEITOS ATIVOS (BUFFS / DEBUFFS):", 185, 196, 14, GOLD);
+    desenharIndicadoresStatusUnidade(unidade, 435, 194, 410);
     desenharTexto("PASSIVAS E COMPORTAMENTO", 185, 226, 17, GOLD);
     if (unidade->aliado) {
         desenharTexto(descricaoPassiva(unidade->classe, false), 195, 250, 14, RAYWHITE);
@@ -1385,6 +1494,8 @@ void desenharTelaSelecaoGrupo(InterfaceJogo *interfaceJogo,
                   515, 608, 22, RAYWHITE);
     if (interfaceJogo->popup_ativo == POPUP_DETALHES_PERSONAGEM) {
         desenharDetalhes(interfaceJogo->entidade_selecionada);
+    } else if (interfaceJogo->popup_ativo == POPUP_PAUSE) {
+        desenharMenuPause();
     }
     finalizarQuadroVirtual();
 }
@@ -1402,13 +1513,13 @@ static void desenharMochila(const InterfaceJogo *interfaceJogo)
     desenharTexto("FECHAR", 772, 80, 14, RAYWHITE);
     for (indice = 0; indice < interfaceJogo->total_selecionados; indice++) {
         int posAbaX = 180 + indice * 220;
-        bool abaAtiva = selecionado != NULL &&
-                        selecionado->id == interfaceJogo->piratas_selecionados_ids[indice];
+        int idPirata = interfaceJogo->piratas_selecionados_ids[indice];
+        bool abaAtiva = selecionado != NULL && selecionado->id == idPirata;
         DrawRectangle(posAbaX, 112, 205, 36,
                       abaAtiva ? (Color){ 45, 95, 130, 255 } : (Color){ 28, 42, 54, 255 });
         DrawRectangleLines(posAbaX, 112, 205, 36, abaAtiva ? GOLD : GRAY);
-        desenharTexto(TextFormat("Pirata %d (Selecionar)", indice + 1),
-                      posAbaX + 18, 122, 14, abaAtiva ? GOLD : RAYWHITE);
+        desenharTexto(nomePirataPorId(idPirata),
+                      posAbaX + 24, 121, 15, abaAtiva ? GOLD : RAYWHITE);
     }
     desenharTexto(interfaceJogo->estado == TELA_COMBATE_3X6 ?
                   "ITENS NA MOCHILA (Em combate: apenas Consumiveis podem ser usados):" :
@@ -1526,67 +1637,6 @@ static void desenharConfirmacaoFuga(void)
     desenharTexto("CANCELAR", 554, 436, 18, RAYWHITE);
 }
 
-// Desenha o painel lateral de inspeção universal da unidade selecionada.
-static void desenharPainelInspecao(const InterfaceJogo *interfaceJogo)
-{
-    const Combatente *unidade = interfaceJogo->entidade_selecionada;
-    int indice;
-    if (unidade == NULL) {
-        desenharTexto("Clique em qualquer unidade para inspecionar.", 880, 200, 15, LIGHTGRAY);
-        return;
-    }
-    DrawRectangle(875, 130, 385, 455, (Color){ 15, 23, 31, 235 });
-    DrawRectangleLines(875, 130, 385, 455, unidade->aliado ? SKYBLUE : ORANGE);
-    desenharTexto(unidade->nome, 890, 142, 20, unidade->aliado ? SKYBLUE : ORANGE);
-    desenharTexto(TextFormat("PV %d/%d | Est %d/%d | Nv %d", unidade->vida_atual,
-                             unidade->vida_maxima, unidade->estamina_atual,
-                             unidade->estamina_maxima, unidade->nivel),
-                  890, 170, 15, RAYWHITE);
-    if (unidade->eh_boss) {
-        desenharTexto(TextFormat("Vel: 8 / 6 / 4 | Fase %d | Prec %d/%d%%",
-                                 unidade->fase_boss, unidade->precisao_melee,
-                                 unidade->precisao_ranged),
-                      890, 194, 14, GOLD);
-    } else {
-        desenharTexto(TextFormat("Vel %d | Prec M/R %d%%/%d%% | Dano +%d%%",
-                                 unidade->velocidade, unidade->precisao_melee,
-                                 unidade->precisao_ranged, unidade->dano_base),
-                      890, 194, 14, LIGHTGRAY);
-    }
-    desenharTexto(TextFormat("Sangr:%d Ven:%d Stun:%d Motiv:%d Desn:%d",
-                             unidade->turnos_sangramento, unidade->turnos_veneno,
-                             unidade->turnos_atordoado, unidade->turnos_motivacao,
-                             unidade->turnos_desnorteado),
-                  890, 218, 13, GOLD);
-    desenharTexto("Passiva:", 890, 244, 15, GOLD);
-    desenharTexto(unidade->aliado ?
-                  descricaoPassiva(unidade->classe, unidade->passiva_aprimorada) :
-                  descricaoPassivaInimigo(unidade),
-                  890, 264, 12, RAYWHITE);
-    desenharTexto("Habilidades:", 890, 294, 15, GOLD);
-    for (indice = 0; indice < unidade->habilidades_desbloqueadas && indice < 3; indice++) {
-        const Habilidade *hab = &unidade->habilidades[indice];
-        desenharTexto(TextFormat("%d. %s (%d-%d | Alc %d | %d Est)",
-                                 indice + 1, hab->nome, hab->dano_min, hab->dano_max,
-                                 hab->alcance, hab->custo_estamina),
-                      890, 316 + indice * 22, 13, RAYWHITE);
-    }
-    if (unidade->aliado) {
-        NoItem *passivo;
-        int posBuildY = 410;
-        desenharTexto(TextFormat("Build Passiva (%d/5):", unidade->build_passivos.tamanho),
-                      890, 388, 15, GOLD);
-        for (passivo = unidade->build_passivos.inicio;
-             passivo != NULL && posBuildY < 560; passivo = passivo->proximo) {
-            desenharTexto(TextFormat("- [%s] %s",
-                                     nomeRaridadeItem(passivo->item.raridade),
-                                     passivo->item.nome),
-                          895, posBuildY, 13, corRaridadeItem(passivo->item.raridade));
-            posBuildY += 20;
-        }
-    }
-}
-
 // Desenha a barra superior da fila de iniciativa, destacando as 3 entradas do Chefe.
 static void desenharFila(const InterfaceJogo *interfaceJogo)
 {
@@ -1691,19 +1741,21 @@ static void desenharTabuleiro(const InterfaceJogo *interfaceJogo,
                 }
             }
             if (mapa->mina_ativa[linha][coluna] > 0) {
-                DrawCircle(posX + 62, posY + 95, 11, RED);
-                desenharTexto("MINA", posX + 45, posY + 108, 12, RAYWHITE);
+                DrawCircle(posX + 86, posY + 100, 11, RED);
+                desenharTexto("MINA", posX + 68, posY + 114, 12, RAYWHITE);
             }
             if (unidade != NULL && unidade->vivo) {
-                desenharTexto(unidade->nome, posX + 6, posY + 8, 13,
+                desenharTexto(unidade->nome, posX + 8, posY + 8, 14,
                               unidade->aliado ? SKYBLUE : ORANGE);
                 desenharTexto(TextFormat("PV %d/%d", unidade->vida_atual,
-                                         unidade->vida_maxima), posX + 6, posY + 30, 13, RAYWHITE);
+                                         unidade->vida_maxima), posX + 8, posY + 30, 13, RAYWHITE);
                 desenharTexto(TextFormat("EST %d/%d", unidade->estamina_atual,
-                                         unidade->estamina_maxima), posX + 6, posY + 52, 13, GOLD);
+                                         unidade->estamina_maxima), posX + 8, posY + 50, 13, GOLD);
                 if (unidade->em_descanso) {
-                    desenharTexto("DESCANSANDO", posX + 6, posY + 74, 11, YELLOW);
+                    desenharTexto("DESCANSANDO", posX + 8, posY + 70, 11, YELLOW);
                 }
+                desenharIndicadoresStatusUnidade(unidade, posX + 8, posY + 90,
+                                                 interfaceJogo->largura_celula - 16);
                 if (unidade == interfaceJogo->ator_atual &&
                     !interfaceJogo->fase_pre_combate_ativa) {
                     DrawRectangleLinesEx((Rectangle){ (float)posX, (float)posY,
@@ -1735,7 +1787,7 @@ static void desenharMenu(void)
     desenharTexto("RPG Tatico Roguelike em Turnos (100% Point-and-Click)", 350, 250, 20, RAYWHITE);
     DrawRectangle(470, 350, 340, 70, (Color){ 45, 125, 70, 255 });
     desenharTexto("INICIAR AVENTURA", 525, 374, 22, RAYWHITE);
-    desenharTexto("Controle exclusivo pelo Mouse.", 505, 470, 16, LIGHTGRAY);
+    desenharTexto("Controle pelo Mouse | ESC abre o menu de Pause.", 440, 470, 16, LIGHTGRAY);
     finalizarQuadroVirtual();
 }
 
@@ -1781,10 +1833,6 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
                                  interfaceJogo->moedas == NULL ? 0 : *interfaceJogo->moedas,
                                  contadorSaques, contadorFugas),
                       390, 95, 18, RAYWHITE);
-        if (interfaceJogo->entidade_selecionada != NULL) {
-            DrawRectangle(1070, 80, 170, 42, (Color){ 42, 63, 76, 255 });
-            desenharTexto("FICHA COMPLETA", 1085, 93, 15, RAYWHITE);
-        }
         if (etapaAtual >= 3) {
             DrawRectangle(480, 340, 380, 100, (Color){ 145, 42, 38, 255 });
             DrawRectangleLines(480, 340, 380, 100, GOLD);
@@ -1827,21 +1875,21 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
                     if (pirata == interfaceJogo->entidade_selecionada) {
                         DrawRectangleLines(55, posCardY, 340, 82, GOLD);
                     }
-                    desenharTexto(pirata->nome, 72, posCardY + 10, 18, RAYWHITE);
+                    desenharTexto(pirata->nome, 72, posCardY + 8, 18, RAYWHITE);
                     desenharTexto(TextFormat("PV %d/%d | Nivel %d | Passivos %d/5",
                                              pirata->vida_atual, pirata->vida_maxima,
                                              pirata->nivel, pirata->build_passivos.tamanho),
-                                  72, posCardY + 42, 14, LIGHTGRAY);
+                                  72, posCardY + 34, 14, LIGHTGRAY);
+                    desenharIndicadoresStatusUnidade(pirata, 72, posCardY + 58, 310);
                 }
             }
         }
-        desenharPainelInspecao(interfaceJogo);
     } else if (interfaceJogo->estado == TELA_COMBATE_3X6 && mapa != NULL) {
         desenharFila(interfaceJogo);
         if (interfaceJogo->fase_pre_combate_ativa) {
             desenharTexto("FASE PRE-COMBATE: Clique nos piratas e nas Colunas 0 e 1 para posicionar/trocar!",
                           80, 62, 18, GOLD);
-            desenharTexto("Inspecione os inimigos clicando neles antes de iniciar.",
+            desenharTexto("Inspecione qualquer unidade selecionando-a e clicando em DETALHES.",
                           80, 90, 15, LIGHTGRAY);
         } else {
             desenharTexto(TextFormat("Turno: %s | Acoes restantes: %d",
@@ -1857,7 +1905,6 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
             }
         }
         desenharTabuleiro(interfaceJogo, mapa, alcanceAtivo);
-        desenharPainelInspecao(interfaceJogo);
         DrawRectangle(70, 610, 1170, 92, (Color){ 12, 20, 29, 235 });
         if (interfaceJogo->fase_pre_combate_ativa) {
             DrawRectangle(90, 630, 260, 55, (Color){ 45, 125, 70, 255 });
@@ -1923,6 +1970,8 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
             desenharDetalhes(interfaceJogo->entidade_selecionada);
         } else if (interfaceJogo->popup_ativo == POPUP_CONFIRMAR_FUGA) {
             desenharConfirmacaoFuga();
+        } else if (interfaceJogo->popup_ativo == POPUP_PAUSE) {
+            desenharMenuPause();
         }
     }
     finalizarQuadroVirtual();

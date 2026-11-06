@@ -48,23 +48,33 @@ static bool testarClassesEMecanicasCombate(void)
     (void)criarPirataInicial(CLASSE_COZINHEIRO, &cozinheiro);
     (void)criarPirataInicial(CLASSE_CAPITAO, &capitao);
     (void)criarPirataInicial(CLASSE_GAVEA, &gavea);
-    if (bucaneiro.vida_maxima != 100 || bucaneiro.velocidade != 9 ||
-        bucaneiro.precisao_melee != 90 || bucaneiro.estamina_maxima != 4 ||
-        timoneiro.vida_maxima != 160 || timoneiro.velocidade != 4 ||
-        timoneiro.precisao_melee != 60 || timoneiro.estamina_maxima != 4 ||
-        cozinheiro.vida_maxima != 130 || cozinheiro.velocidade != 6 ||
-        cozinheiro.precisao_melee != 60 || cozinheiro.estamina_maxima != 5 ||
-        capitao.vida_maxima != 120 || capitao.velocidade != 7 ||
+    if (bucaneiro.vida_maxima != 150 || bucaneiro.velocidade != 9 ||
+        bucaneiro.precisao_melee != 90 || bucaneiro.estamina_maxima != 5 ||
+        bucaneiro.habilidades[0].dano_min != 60 || bucaneiro.habilidades[0].dano_max != 90 ||
+        bucaneiro.habilidades[2].dano_min != 120 || bucaneiro.habilidades[2].dano_max != 150 ||
+        timoneiro.vida_maxima != 250 || timoneiro.velocidade != 4 ||
+        timoneiro.precisao_melee != 60 || timoneiro.estamina_maxima != 5 ||
+        timoneiro.habilidades[0].dano_min != 70 || timoneiro.habilidades[0].dano_max != 100 ||
+        timoneiro.habilidades[1].dano_min != 90 || timoneiro.habilidades[1].dano_max != 120 ||
+        timoneiro.habilidades[2].dano_min != 50 || timoneiro.habilidades[2].dano_max != 85 ||
+        cozinheiro.vida_maxima != 200 || cozinheiro.velocidade != 6 ||
+        cozinheiro.precisao_melee != 100 || cozinheiro.estamina_maxima != 5 ||
+        cozinheiro.habilidades[1].dano_min != 60 || cozinheiro.habilidades[1].dano_max != 100 ||
+        capitao.vida_maxima != 170 || capitao.velocidade != 7 ||
         capitao.precisao_melee != 70 || capitao.precisao_ranged != 60 ||
-        gavea.vida_maxima != 70 || gavea.velocidade != 5 ||
-        gavea.precisao_melee != 40 || gavea.estamina_maxima != 5) {
+        capitao.habilidades[0].dano_min != 75 || capitao.habilidades[0].dano_max != 100 ||
+        capitao.habilidades[2].dano_min != 100 || capitao.habilidades[2].dano_max != 130 ||
+        gavea.vida_maxima != 120 || gavea.velocidade != 5 ||
+        gavea.precisao_melee != 40 || gavea.estamina_maxima != 5 ||
+        gavea.habilidades[0].dano_min != 60 || gavea.habilidades[0].dano_max != 110 ||
+        gavea.habilidades[2].dano_min != 150 || gavea.habilidades[2].dano_max != 200) {
         fprintf(stderr, "Falha sanitaria: atributos base dos 5 piratas incorretos.\n");
         return false;
     }
 
     (void)subirNivelPirata(&gavea, 1);
-    if (gavea.nivel != 2 || gavea.estamina_maxima != 6 || gavea.vida_maxima != 84 ||
-        gavea.habilidades[0].dano_min != 24 || gavea.habilidades[0].dano_max != 48) {
+    if (gavea.nivel != 2 || gavea.estamina_maxima != 6 || gavea.vida_maxima != 144 ||
+        gavea.habilidades[0].dano_min != 72 || gavea.habilidades[0].dano_max != 132) {
         fprintf(stderr, "Falha sanitaria: Gavea Nv 2 (estamina 6 e +20%% vida/dano).\n");
         return false;
     }
@@ -74,13 +84,60 @@ static bool testarClassesEMecanicasCombate(void)
         return false;
     }
 
+    (void)subirNivelPirata(&bucaneiro, 1);
+    if (bucaneiro.estamina_maxima != 7) {
+        fprintf(stderr, "Falha sanitaria: Bucaneiro Nv 2 deve ter 7 de estamina.\n");
+        return false;
+    }
+    (void)subirNivelPirata(&bucaneiro, 2);
+    if (bucaneiro.estamina_maxima != 10) {
+        fprintf(stderr, "Falha sanitaria: Bucaneiro Nv 4 deve ter 10 de estamina.\n");
+        return false;
+    }
+
+    (void)subirNivelPirata(&timoneiro, 1);
+    if (timoneiro.estamina_maxima != 6) {
+        fprintf(stderr, "Falha sanitaria: Timoneiro Nv 2 deve ter 6 de estamina.\n");
+        return false;
+    }
+    (void)subirNivelPirata(&timoneiro, 2);
+    if (timoneiro.estamina_maxima != 7) {
+        fprintf(stderr, "Falha sanitaria: Timoneiro Nv 4 deve ter 7 de estamina.\n");
+        return false;
+    }
+
     (void)memset(&mapa, 0, sizeof(mapa));
+    (void)criarPirataInicial(CLASSE_BUCANEIRO, &bucaneiro);
     bucaneiro.linha = 1;
     bucaneiro.coluna = 0;
     mapa.celulas[1][0] = &bucaneiro;
     if (!moverCombatente3x6(&mapa, &bucaneiro, 1, 2) ||
-        bucaneiro.coluna != 2 || bucaneiro.estamina_atual != 3) {
+        bucaneiro.coluna != 2 || bucaneiro.estamina_atual != 4) {
         fprintf(stderr, "Falha sanitaria: passiva Nv 1 do Bucaneiro (andar 2 casas).\n");
+        return false;
+    }
+
+    (void)memset(&mapa, 0, sizeof(mapa));
+    (void)criarPirataInicial(CLASSE_BUCANEIRO, &bucaneiro);
+    (void)criarInimigoInicial(INIMIGO_MARUJO_GORDO, &inimigoA);
+    inimigoA.vida_maxima = 900;
+    inimigoA.vida_atual = 900;
+    bucaneiro.linha = 1;
+    bucaneiro.coluna = 1;
+    inimigoA.linha = 1;
+    inimigoA.coluna = 2;
+    mapa.celulas[1][1] = &bucaneiro;
+    mapa.celulas[1][2] = &inimigoA;
+    executarAtaqueOuHabilidade(&mapa, &bucaneiro, 0, 1, 2);
+    if (inimigoA.turnos_sangramento != 0 ||
+        inimigoA.golpes_corte_bucaneiro_recebidos != 1) {
+        fprintf(stderr, "Falha sanitaria: 1o Ataque 1 do Bucaneiro nao deve sangrar ainda.\n");
+        return false;
+    }
+    bucaneiro.estamina_atual = bucaneiro.estamina_maxima;
+    executarAtaqueOuHabilidade(&mapa, &bucaneiro, 0, 1, 2);
+    if (inimigoA.turnos_sangramento != 3) {
+        fprintf(stderr, "Falha sanitaria: 2o Ataque 1 do Bucaneiro no mesmo inimigo deve causar Sangramento.\n");
         return false;
     }
 
@@ -88,7 +145,7 @@ static bool testarClassesEMecanicasCombate(void)
     (void)criarPirataInicial(CLASSE_BUCANEIRO, &bucaneiro);
     (void)subirNivelPirata(&bucaneiro, 5);
     if (bucaneiro.nivel != 6 || bucaneiro.habilidades_desbloqueadas != 3 ||
-        bucaneiro.estamina_maxima != 8) {
+        bucaneiro.estamina_maxima != 10) {
         fprintf(stderr, "Falha sanitaria: progressao Nv 6 do Bucaneiro.\n");
         return false;
     }
@@ -116,7 +173,8 @@ static bool testarClassesEMecanicasCombate(void)
     bucaneiro.vida_atual = 50;
     bucaneiro.linha = 1;
     bucaneiro.coluna = 1;
-    inimigoA.vida_atual = 300;
+    inimigoA.vida_maxima = 600;
+    inimigoA.vida_atual = 600;
     inimigoA.linha = 1;
     inimigoA.coluna = 3;
     mapa.celulas[1][1] = &bucaneiro;
@@ -124,7 +182,7 @@ static bool testarClassesEMecanicasCombate(void)
     mapa.mina_ativa[1][2] = 1;
     executarAtaqueOuHabilidade(&mapa, &bucaneiro, 2, 1, 3);
     if (bucaneiro.coluna != 4 || mapa.mina_ativa[1][2] != 0 ||
-        inimigoA.vida_atual >= 300 || bucaneiro.vida_atual <= 50) {
+        inimigoA.vida_atual >= 600 || bucaneiro.vida_atual <= 50) {
         fprintf(stderr, "Falha sanitaria: Avanco Impetuoso (dash dist 3 + lifesteal + mina).\n");
         return false;
     }
@@ -136,6 +194,8 @@ static bool testarClassesEMecanicasCombate(void)
     timoneiro.linha = 1;
     timoneiro.coluna = 1;
     (void)criarInimigoInicial(INIMIGO_GRUNT_ESPADA, &inimigoA);
+    inimigoA.vida_maxima = 500;
+    inimigoA.vida_atual = 500;
     inimigoA.linha = 1;
     inimigoA.coluna = 2;
     mapa.celulas[1][1] = &timoneiro;
@@ -148,36 +208,72 @@ static bool testarClassesEMecanicasCombate(void)
 
     (void)memset(&mapa, 0, sizeof(mapa));
     (void)criarPirataInicial(CLASSE_COZINHEIRO, &cozinheiro);
-    (void)subirNivelPirata(&cozinheiro, 5);
-    cozinheiro.habilidades[1].precisao = 100;
+    cozinheiro.habilidades_desbloqueadas = 2;
     cozinheiro.linha = 1;
     cozinheiro.coluna = 1;
+    (void)criarInimigoInicial(INIMIGO_MARUJO_GORDO, &inimigoA);
+    (void)criarInimigoInicial(INIMIGO_MARUJO_GORDO, &inimigoB);
+    inimigoA.vida_maxima = 300;
+    inimigoA.vida_atual = 300;
+    inimigoB.vida_maxima = 300;
+    inimigoB.vida_atual = 300;
+    inimigoA.linha = 1;
+    inimigoA.coluna = 2;
+    inimigoB.linha = 0;
+    inimigoB.coluna = 3;
+    mapa.celulas[1][1] = &cozinheiro;
+    mapa.celulas[1][2] = &inimigoA;
+    mapa.celulas[0][3] = &inimigoB;
+    executarAtaqueOuHabilidade(&mapa, &cozinheiro, 1, 0, 3);
+    if (inimigoA.vida_atual != 200 || inimigoB.vida_atual != 300) {
+        fprintf(stderr, "Falha sanitaria: Bacamarte deve dar 100 de perto e ser bloqueado na dist 1.\n");
+        return false;
+    }
+    mapa.celulas[1][2] = NULL;
+    cozinheiro.estamina_atual = cozinheiro.estamina_maxima;
+    executarAtaqueOuHabilidade(&mapa, &cozinheiro, 1, 0, 3);
+    if (inimigoB.vida_atual != 240) {
+        fprintf(stderr, "Falha sanitaria: Bacamarte deve dar 60 no alcance mais longo.\n");
+        return false;
+    }
+    (void)subirNivelPirata(&cozinheiro, 5);
+    cozinheiro.estamina_atual = cozinheiro.estamina_maxima;
     bucaneiro.vida_atual = 20;
     bucaneiro.linha = 0;
     bucaneiro.coluna = 2;
-    mapa.celulas[1][1] = &cozinheiro;
     mapa.celulas[0][2] = &bucaneiro;
     executarAtaqueOuHabilidade(&mapa, &cozinheiro, 2, 0, 2);
     if (bucaneiro.vida_atual <= 20) {
         fprintf(stderr, "Falha sanitaria: Hora do Rango (cura em area 2x3).\n");
         return false;
     }
-    cozinheiro.estamina_atual = cozinheiro.estamina_maxima;
-    (void)criarInimigoInicial(INIMIGO_GRUNT_ESPADA, &inimigoA);
-    (void)criarInimigoInicial(INIMIGO_GRUNT_ESPADA, &inimigoB);
+
+    (void)memset(&mapa, 0, sizeof(mapa));
+    (void)criarPirataInicial(CLASSE_CAPITAO, &capitao);
+    capitao.linha = 1;
+    capitao.coluna = 1;
+    (void)criarInimigoInicial(INIMIGO_MARUJO_GORDO, &inimigoA);
+    inimigoA.vida_maxima = 300;
+    inimigoA.vida_atual = 300;
     inimigoA.linha = 1;
     inimigoA.coluna = 2;
-    inimigoB.linha = 0;
-    inimigoB.coluna = 3;
+    mapa.celulas[1][1] = &capitao;
     mapa.celulas[1][2] = &inimigoA;
-    mapa.celulas[0][3] = &inimigoB;
-    executarAtaqueOuHabilidade(&mapa, &cozinheiro, 1, 0, 3);
-    if (inimigoA.vida_atual >= inimigoA.vida_maxima ||
-        inimigoB.vida_atual != inimigoB.vida_maxima) {
-        fprintf(stderr, "Falha sanitaria: Bacamarte (cone bloqueado na distancia 1).\n");
+    executarAtaqueOuHabilidade(&mapa, &capitao, 0, 1, 2);
+    if (inimigoA.vida_atual != 200) {
+        fprintf(stderr, "Falha sanitaria: Saquear do Capitao deve dar 100 de perto.\n");
         return false;
     }
-
+    mapa.celulas[1][2] = NULL;
+    inimigoA.linha = 1;
+    inimigoA.coluna = 3;
+    mapa.celulas[1][3] = &inimigoA;
+    capitao.estamina_atual = capitao.estamina_maxima;
+    executarAtaqueOuHabilidade(&mapa, &capitao, 0, 1, 3);
+    if (inimigoA.vida_atual != 125) {
+        fprintf(stderr, "Falha sanitaria: Saquear do Capitao deve dar 75 de longe.\n");
+        return false;
+    }
     (void)memset(&mapa, 0, sizeof(mapa));
     (void)criarPirataInicial(CLASSE_CAPITAO, &capitao);
     (void)subirNivelPirata(&capitao, 5);
@@ -187,6 +283,10 @@ static bool testarClassesEMecanicasCombate(void)
     capitao.coluna = 0;
     (void)criarInimigoInicial(INIMIGO_GRUNT_ESPADA, &inimigoA);
     (void)criarInimigoInicial(INIMIGO_GRUNT_ESPADA, &inimigoB);
+    inimigoA.vida_maxima = 900;
+    inimigoA.vida_atual = 900;
+    inimigoB.vida_maxima = 900;
+    inimigoB.vida_atual = 900;
     inimigoA.linha = 0;
     inimigoA.coluna = 5;
     inimigoB.linha = 2;
@@ -233,8 +333,12 @@ static bool testarClassesEMecanicasCombate(void)
     (void)criarInimigoInicial(INIMIGO_GRUNT_ESPADA, &inimigoA);
     (void)criarInimigoInicial(INIMIGO_GRUNT_ESPADA, &inimigoB);
     (void)criarInimigoInicial(INIMIGO_GRUNT_ESPADA, &inimigoC);
-    inimigoA.vida_maxima = 500;
-    inimigoA.vida_atual = 500;
+    inimigoA.vida_maxima = 900;
+    inimigoA.vida_atual = 900;
+    inimigoB.vida_maxima = 900;
+    inimigoB.vida_atual = 900;
+    inimigoC.vida_maxima = 900;
+    inimigoC.vida_atual = 900;
     inimigoA.linha = 1;
     inimigoA.coluna = 2;
     inimigoB.linha = 1;
@@ -372,7 +476,7 @@ static bool testarReposicaoTripulacaoPosFuga(void)
         piratas[CLASSE_BUCANEIRO].build_passivos.tamanho != 1 ||
         !piratas[CLASSE_TIMONEIRO].vivo ||
         piratas[CLASSE_TIMONEIRO].nivel != 1 ||
-        piratas[CLASSE_TIMONEIRO].vida_maxima != 160 ||
+        piratas[CLASSE_TIMONEIRO].vida_maxima != 250 ||
         piratas[CLASSE_TIMONEIRO].build_passivos.tamanho != 0) {
         fprintf(stderr, "Falha sanitaria: reposicao pos-fuga e reset de mortos ao Nv 1.\n");
         for (indice = 0; indice < TOTAL_PIRATAS_PREDEFINIDOS; indice++) {

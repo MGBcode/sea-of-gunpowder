@@ -74,12 +74,12 @@ bool criarPirataInicial(int indice, Combatente *destino)
     static const char *nomes[TOTAL_PIRATAS_PREDEFINIDOS] = {
         "Bucaneiro", "Timoneiro", "Cozinheiro", "Capitao", "Gavea"
     };
-    static const int vidas[TOTAL_PIRATAS_PREDEFINIDOS] = { 100, 160, 130, 120, 70 };
+    static const int vidas[TOTAL_PIRATAS_PREDEFINIDOS] = { 150, 250, 200, 170, 120 };
     static const int velocidades[TOTAL_PIRATAS_PREDEFINIDOS] = { 9, 4, 6, 7, 5 };
-    static const int precisao[TOTAL_PIRATAS_PREDEFINIDOS] = { 90, 60, 60, 70, 40 };
+    static const int precisao[TOTAL_PIRATAS_PREDEFINIDOS] = { 90, 60, 100, 70, 40 };
     static const int estamina[TOTAL_PIRATAS_PREDEFINIDOS][6] = {
-        { 4, 6, 6, 8, 8, 8 },
-        { 4, 5, 5, 6, 6, 6 },
+        { 5, 7, 7, 10, 10, 10 },
+        { 5, 6, 6, 7, 7, 7 },
         { 5, 6, 6, 8, 8, 8 },
         { 5, 6, 6, 7, 7, 7 },
         { 5, 6, 6, 7, 7, 7 }
@@ -96,46 +96,46 @@ bool criarPirataInicial(int indice, Combatente *destino)
         destino->estamina_por_nivel[nivel] = estamina[indice][nivel];
     }
     if (indice == CLASSE_BUCANEIRO) {
-        definirHabilidade(&destino->habilidades[0], "Corte Sangrento", 30, 50, 90, 1, 2,
+        definirHabilidade(&destino->habilidades[0], "Corte Sangrento", 60, 90, 90, 1, 2,
                           EFEITO_SANGRAMENTO, ATAQUE_MELEE);
         definirHabilidade(&destino->habilidades[1], "Bolsa de Areia", 0, 0, 90, 1, 4,
                           EFEITO_ESTUNAR, ATAQUE_AREA_1X3);
-        definirHabilidade(&destino->habilidades[2], "Avanco Impetuoso", 60, 90, 90, 2, 6,
+        definirHabilidade(&destino->habilidades[2], "Avanco Impetuoso", 120, 150, 90, 2, 6,
                           EFEITO_DANO, ATAQUE_DASH_CARDEAL);
         destino->habilidades[0].duracao_efeito = 3;
         destino->habilidades[1].duracao_efeito = 1;
     } else if (indice == CLASSE_TIMONEIRO) {
-        definirHabilidade(&destino->habilidades[0], "Pancada", 30, 35, 60, 1, 2,
+        definirHabilidade(&destino->habilidades[0], "Pancada", 70, 100, 60, 1, 2,
                           EFEITO_DANO, ATAQUE_MELEE);
-        definirHabilidade(&destino->habilidades[1], "Esmagar", 40, 60, 60, 1, 3,
+        definirHabilidade(&destino->habilidades[1], "Esmagar", 90, 120, 60, 1, 3,
                           EFEITO_ESTUNAR, ATAQUE_MELEE);
-        definirHabilidade(&destino->habilidades[2], "Giro do Timao", 30, 50, 60, 1, 4,
+        definirHabilidade(&destino->habilidades[2], "Giro do Timao", 50, 85, 60, 1, 4,
                           EFEITO_DESNORTEAR, ATAQUE_AREA_1X3);
         destino->habilidades[1].duracao_efeito = 1;
         destino->habilidades[2].duracao_efeito = 2;
     } else if (indice == CLASSE_COZINHEIRO) {
-        definirHabilidade(&destino->habilidades[0], "Comida da Boa", 0, 35, 60, 2, 2,
+        definirHabilidade(&destino->habilidades[0], "Comida da Boa", 0, 35, 100, 2, 2,
                           EFEITO_CURA, ATAQUE_RANGED);
-        definirHabilidade(&destino->habilidades[1], "Bacamarte", 15, 40, 60, 2, 3,
+        definirHabilidade(&destino->habilidades[1], "Bacamarte", 60, 100, 100, 2, 3,
                           EFEITO_DANO, ATAQUE_CONE);
-        definirHabilidade(&destino->habilidades[2], "Hora do Rango", 0, 70, 60, 2, 6,
+        definirHabilidade(&destino->habilidades[2], "Hora do Rango", 0, 70, 100, 2, 6,
                           EFEITO_CURA, ATAQUE_AREA_2X3);
     } else if (indice == CLASSE_CAPITAO) {
         destino->precisao_ranged = 60;
-        definirHabilidade(&destino->habilidades[0], "Saquear", 20, 50, 70, 2, 2,
+        definirHabilidade(&destino->habilidades[0], "Saquear", 75, 100, 70, 2, 2,
                           EFEITO_DANO, ATAQUE_HIBRIDO_SAQUEAR);
         definirHabilidade(&destino->habilidades[1], "Discursar", 0, 0, 70, 2, 3,
                           EFEITO_MOTIVACAO, ATAQUE_RANGED);
-        definirHabilidade(&destino->habilidades[2], "Enxurrada de Canhoes", 50, 70, 70, 5, 6,
+        definirHabilidade(&destino->habilidades[2], "Enxurrada de Canhoes", 100, 130, 70, 5, 6,
                           EFEITO_BOMBA, ATAQUE_AREA_3X2);
         destino->habilidades[1].duracao_efeito = 2;
         destino->habilidades[2].fogo_amigo = true;
     } else {
-        definirHabilidade(&destino->habilidades[0], "Disparo de Longa Distancia", 20, 40,
+        definirHabilidade(&destino->habilidades[0], "Disparo de Longa Distancia", 60, 110,
                           40, 3, 2, EFEITO_DANO, ATAQUE_LINHA);
         definirHabilidade(&destino->habilidades[1], "Zarabatana", 0, 0, 40, 2, 1,
                           EFEITO_VENENO, ATAQUE_RANGED);
-        definirHabilidade(&destino->habilidades[2], "Bala Perfurante Especial", 70, 90,
+        definirHabilidade(&destino->habilidades[2], "Bala Perfurante Especial", 150, 200,
                           40, 6, 4, EFEITO_DANO, ATAQUE_LINHA);
         destino->habilidades[1].duracao_efeito = 2;
         destino->habilidades[2].fogo_amigo = true;

@@ -17,7 +17,8 @@ typedef enum {
     POPUP_MOCHILA_BUILDS,
     POPUP_LOJA,
     POPUP_DETALHES_PERSONAGEM,
-    POPUP_CONFIRMAR_FUGA
+    POPUP_CONFIRMAR_FUGA,
+    POPUP_PAUSE
 } TipoPopupModal;
 
 typedef enum {

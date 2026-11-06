@@ -519,12 +519,12 @@ static int calcularDanoFinal(Tabuleiro3x6 *mapa, Combatente *atacante,
                          distancia > 1);
     if (atacante->aliado && atacante->classe == CLASSE_COZINHEIRO &&
         indiceHabilidade == 1) {
-        danoMax = distancia == 1 ? habilidade->dano_max : habilidade->dano_max / 2;
-        danoMin = distancia == 1 ? (habilidade->dano_max * 3) / 4 : habilidade->dano_min;
+        danoMin = distancia == 1 ? habilidade->dano_max : habilidade->dano_min;
+        danoMax = danoMin;
     } else if (atacante->aliado && atacante->classe == CLASSE_CAPITAO &&
                indiceHabilidade == 0) {
-        danoMax = distancia == 1 ? habilidade->dano_max : habilidade->dano_max / 2;
-        danoMin = distancia == 1 ? (habilidade->dano_max * 3) / 5 : habilidade->dano_min;
+        danoMin = distancia == 1 ? habilidade->dano_max : habilidade->dano_min;
+        danoMax = danoMin;
     } else if (!atacante->aliado && atacante->tipo_inimigo == INIMIGO_MARUJO_GORDO &&
                indiceHabilidade == 0 && distancia > 1) {
         danoMin = habilidade->dano_min / 2;
