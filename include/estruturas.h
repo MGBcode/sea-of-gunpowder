@@ -180,6 +180,8 @@ typedef struct Combatente {
 typedef struct {
     Combatente *celulas[LINHAS_TABULEIRO][COLUNAS_TABULEIRO];
     int mina_ativa[LINHAS_TABULEIRO][COLUNAS_TABULEIRO];
+    int ultimo_dano_celula[LINHAS_TABULEIRO][COLUNAS_TABULEIRO];
+    int ultima_cura_celula[LINHAS_TABULEIRO][COLUNAS_TABULEIRO];
     bool boss_fase_2_ativa;
     int turnos_boss_fase_2;
 } Tabuleiro3x6;

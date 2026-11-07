@@ -52,19 +52,19 @@ static bool testarClassesEMecanicasCombate(void)
         bucaneiro.precisao_melee != 90 || bucaneiro.estamina_maxima != 5 ||
         bucaneiro.habilidades[0].dano_min != 60 || bucaneiro.habilidades[0].dano_max != 90 ||
         bucaneiro.habilidades[2].dano_min != 120 || bucaneiro.habilidades[2].dano_max != 150 ||
-        timoneiro.vida_maxima != 250 || timoneiro.velocidade != 4 ||
+        timoneiro.vida_maxima != 250 || timoneiro.velocidade != 5 ||
         timoneiro.precisao_melee != 60 || timoneiro.estamina_maxima != 5 ||
         timoneiro.habilidades[0].dano_min != 70 || timoneiro.habilidades[0].dano_max != 100 ||
         timoneiro.habilidades[1].dano_min != 90 || timoneiro.habilidades[1].dano_max != 120 ||
         timoneiro.habilidades[2].dano_min != 50 || timoneiro.habilidades[2].dano_max != 85 ||
-        cozinheiro.vida_maxima != 200 || cozinheiro.velocidade != 6 ||
+        cozinheiro.vida_maxima != 200 || cozinheiro.velocidade != 5 ||
         cozinheiro.precisao_melee != 100 || cozinheiro.estamina_maxima != 5 ||
         cozinheiro.habilidades[1].dano_min != 60 || cozinheiro.habilidades[1].dano_max != 100 ||
         capitao.vida_maxima != 170 || capitao.velocidade != 7 ||
         capitao.precisao_melee != 70 || capitao.precisao_ranged != 60 ||
         capitao.habilidades[0].dano_min != 75 || capitao.habilidades[0].dano_max != 100 ||
         capitao.habilidades[2].dano_min != 100 || capitao.habilidades[2].dano_max != 130 ||
-        gavea.vida_maxima != 120 || gavea.velocidade != 5 ||
+        gavea.vida_maxima != 120 || gavea.velocidade != 6 ||
         gavea.precisao_melee != 40 || gavea.estamina_maxima != 5 ||
         gavea.habilidades[0].dano_min != 60 || gavea.habilidades[0].dano_max != 110 ||
         gavea.habilidades[2].dano_min != 150 || gavea.habilidades[2].dano_max != 200) {
@@ -225,15 +225,8 @@ static bool testarClassesEMecanicasCombate(void)
     mapa.celulas[1][2] = &inimigoA;
     mapa.celulas[0][3] = &inimigoB;
     executarAtaqueOuHabilidade(&mapa, &cozinheiro, 1, 0, 3);
-    if (inimigoA.vida_atual != 200 || inimigoB.vida_atual != 300) {
-        fprintf(stderr, "Falha sanitaria: Bacamarte deve dar 100 de perto e ser bloqueado na dist 1.\n");
-        return false;
-    }
-    mapa.celulas[1][2] = NULL;
-    cozinheiro.estamina_atual = cozinheiro.estamina_maxima;
-    executarAtaqueOuHabilidade(&mapa, &cozinheiro, 1, 0, 3);
-    if (inimigoB.vida_atual != 240) {
-        fprintf(stderr, "Falha sanitaria: Bacamarte deve dar 60 no alcance mais longo.\n");
+    if (inimigoA.vida_atual != 200 || inimigoB.vida_atual != 240) {
+        fprintf(stderr, "Falha sanitaria: Bacamarte deve atingir toda a area em cone (100 perto e 60 longe).\n");
         return false;
     }
     (void)subirNivelPirata(&cozinheiro, 5);
@@ -965,6 +958,170 @@ static bool executarTestesSanitarios(void)
             executarAtaqueOuHabilidade(&mapaTeste, &gruntPistola, 0, 1, 2);
             if (inimigoTras.vida_atual >= 500 || inimigoFrente.vida_atual != 500) {
                 fprintf(stderr, "Falha sanitaria: Tiro do Grunt Pistola nao deve atravessar o 1o alvo.\n");
+                goto limpeza;
+            }
+
+            (void)memset(&mapaTeste, 0, sizeof(mapaTeste));
+            (void)criarPirataInicial(CLASSE_GAVEA, &pirataLoja);
+            (void)criarPirataInicial(CLASSE_TIMONEIRO, &alvoTeste);
+            (void)criarInimigoInicial(INIMIGO_MARUJO_GORDO, &inimigoFrente);
+            (void)criarInimigoInicial(INIMIGO_MARUJO_GORDO, &inimigoTras);
+            pirataLoja.habilidades_desbloqueadas = 3;
+            pirataLoja.precisao_ranged = 100;
+            pirataLoja.habilidades[2].precisao = 100;
+            pirataLoja.linha = 1;
+            pirataLoja.coluna = 0;
+            alvoTeste.vida_maxima = 500;
+            alvoTeste.vida_atual = 500;
+            alvoTeste.linha = 1;
+            alvoTeste.coluna = 1;
+            inimigoFrente.aliado = false;
+            inimigoFrente.vida_maxima = 500;
+            inimigoFrente.vida_atual = 500;
+            inimigoFrente.linha = 1;
+            inimigoFrente.coluna = 2;
+            inimigoTras.aliado = false;
+            inimigoTras.vida_maxima = 500;
+            inimigoTras.vida_atual = 500;
+            inimigoTras.linha = 1;
+            inimigoTras.coluna = 3;
+            mapaTeste.celulas[1][0] = &pirataLoja;
+            mapaTeste.celulas[1][1] = &alvoTeste;
+            mapaTeste.celulas[1][2] = &inimigoFrente;
+            mapaTeste.celulas[1][3] = &inimigoTras;
+            executarAtaqueOuHabilidade(&mapaTeste, &pirataLoja, 2, 1, 2);
+            if (inimigoFrente.vida_atual != 300 || inimigoTras.vida_atual != 300 ||
+                alvoTeste.vida_atual != 400 ||
+                mapaTeste.ultimo_dano_celula[1][1] != 100 ||
+                mapaTeste.ultimo_dano_celula[1][2] != 200 ||
+                mapaTeste.ultimo_dano_celula[1][3] != 200) {
+                fprintf(stderr, "Falha sanitaria: Ultimate Gavea deve atingir todos os inimigos (100%%) e aliados (50%%) na linha.\n");
+                goto limpeza;
+            }
+
+            (void)memset(&mapaTeste, 0, sizeof(mapaTeste));
+            (void)criarPirataInicial(CLASSE_BUCANEIRO, &pirataLoja);
+            pirataLoja.habilidades_desbloqueadas = 3;
+            pirataLoja.estamina_maxima = 10;
+            pirataLoja.estamina_atual = 10;
+            pirataLoja.precisao_melee = 100;
+            pirataLoja.habilidades[2].precisao = 100;
+            pirataLoja.linha = 1;
+            pirataLoja.coluna = 0;
+            alvoTeste.vida_atual = 500;
+            alvoTeste.linha = 1;
+            alvoTeste.coluna = 1;
+            inimigoFrente.vida_atual = 500;
+            inimigoFrente.linha = 1;
+            inimigoFrente.coluna = 2;
+            mapaTeste.celulas[1][0] = &pirataLoja;
+            mapaTeste.celulas[1][1] = &alvoTeste;
+            mapaTeste.celulas[1][2] = &inimigoFrente;
+            executarAtaqueOuHabilidade(&mapaTeste, &pirataLoja, 2, 1, 2);
+            if (inimigoFrente.vida_atual != 350 || alvoTeste.vida_atual != 425) {
+                fprintf(stderr, "Falha sanitaria: Ultimate Bucaneiro deve atingir inimigos (100%%) e aliados (50%%) na linha.\n");
+                goto limpeza;
+            }
+
+            (void)memset(&mapaTeste, 0, sizeof(mapaTeste));
+            (void)criarPirataInicial(CLASSE_TIMONEIRO, &pirataLoja);
+            pirataLoja.habilidades_desbloqueadas = 3;
+            pirataLoja.estamina_maxima = 10;
+            pirataLoja.estamina_atual = 10;
+            pirataLoja.precisao_melee = 100;
+            pirataLoja.habilidades[2].precisao = 100;
+            pirataLoja.linha = 1;
+            pirataLoja.coluna = 1;
+            alvoTeste.vida_atual = 500;
+            alvoTeste.linha = 0;
+            alvoTeste.coluna = 2;
+            inimigoFrente.vida_atual = 500;
+            inimigoFrente.linha = 1;
+            inimigoFrente.coluna = 2;
+            inimigoTras.vida_atual = 500;
+            inimigoTras.linha = 2;
+            inimigoTras.coluna = 2;
+            mapaTeste.celulas[1][1] = &pirataLoja;
+            mapaTeste.celulas[0][2] = &alvoTeste;
+            mapaTeste.celulas[1][2] = &inimigoFrente;
+            mapaTeste.celulas[2][2] = &inimigoTras;
+            executarAtaqueOuHabilidade(&mapaTeste, &pirataLoja, 2, 1, 2);
+            if (inimigoFrente.vida_atual != 415 || inimigoTras.vida_atual != 415 ||
+                alvoTeste.vida_atual != 458) {
+                fprintf(stderr, "Falha sanitaria: Ultimate Timoneiro deve atingir toda a faixa 1x3 (inimigos 100%%, aliados 50%%).\n");
+                goto limpeza;
+            }
+
+            (void)memset(&mapaTeste, 0, sizeof(mapaTeste));
+            (void)criarPirataInicial(CLASSE_CAPITAO, &pirataLoja);
+            pirataLoja.habilidades_desbloqueadas = 3;
+            pirataLoja.estamina_maxima = 10;
+            pirataLoja.estamina_atual = 10;
+            pirataLoja.precisao_ranged = 100;
+            pirataLoja.habilidades[2].precisao = 100;
+            pirataLoja.linha = 1;
+            pirataLoja.coluna = 0;
+            alvoTeste.vida_atual = 500;
+            alvoTeste.linha = 0;
+            alvoTeste.coluna = 3;
+            inimigoFrente.vida_atual = 500;
+            inimigoFrente.linha = 1;
+            inimigoFrente.coluna = 3;
+            inimigoTras.vida_atual = 500;
+            inimigoTras.linha = 2;
+            inimigoTras.coluna = 3;
+            mapaTeste.celulas[1][0] = &pirataLoja;
+            mapaTeste.celulas[0][3] = &alvoTeste;
+            mapaTeste.celulas[1][3] = &inimigoFrente;
+            mapaTeste.celulas[2][3] = &inimigoTras;
+            executarAtaqueOuHabilidade(&mapaTeste, &pirataLoja, 2, 1, 3);
+            if (inimigoFrente.vida_atual != 370 || inimigoTras.vida_atual != 370 ||
+                alvoTeste.vida_atual != 435) {
+                fprintf(stderr, "Falha sanitaria: Ultimate Capitao deve atingir inimigos (100%%) e aliados (50%%) na cruz.\n");
+                goto limpeza;
+            }
+
+            (void)memset(&mapaTeste, 0, sizeof(mapaTeste));
+            (void)criarPirataInicial(CLASSE_COZINHEIRO, &pirataLoja);
+            pirataLoja.habilidades_desbloqueadas = 3;
+            pirataLoja.estamina_maxima = 10;
+            pirataLoja.estamina_atual = 10;
+            pirataLoja.linha = 1;
+            pirataLoja.coluna = 0;
+            alvoTeste.vida_atual = 500;
+            alvoTeste.linha = 0;
+            alvoTeste.coluna = 2;
+            inimigoFrente.vida_atual = 500;
+            inimigoFrente.linha = 1;
+            inimigoFrente.coluna = 1;
+            inimigoTras.vida_atual = 500;
+            inimigoTras.linha = 1;
+            inimigoTras.coluna = 2;
+            mapaTeste.celulas[1][0] = &pirataLoja;
+            mapaTeste.celulas[0][2] = &alvoTeste;
+            mapaTeste.celulas[1][1] = &inimigoFrente;
+            mapaTeste.celulas[1][2] = &inimigoTras;
+            executarAtaqueOuHabilidade(&mapaTeste, &pirataLoja, 1, 1, 1);
+            if (inimigoFrente.vida_atual != 400 || inimigoTras.vida_atual != 440 ||
+                alvoTeste.vida_atual != 470) {
+                fprintf(stderr, "Falha sanitaria: Bacamarte deve atingir inimigos (100%%) e aliados (50%%) no cone.\n");
+                goto limpeza;
+            }
+
+            alvoTeste.golpes_corte_grunt_recebidos = 2;
+            alvoTeste.golpes_corte_bucaneiro_recebidos = 1;
+            alvoTeste.turnos_sangramento = 2;
+            alvoTeste.turnos_veneno = 2;
+            alvoTeste.turnos_motivacao = 3;
+            alvoTeste.turnos_tonico = 2;
+            limparEfeitosPosCombate(&alvoTeste);
+            if (alvoTeste.golpes_corte_grunt_recebidos != 0 ||
+                alvoTeste.golpes_corte_bucaneiro_recebidos != 0 ||
+                alvoTeste.turnos_sangramento != 0 ||
+                alvoTeste.turnos_veneno != 0 ||
+                alvoTeste.turnos_motivacao != 0 ||
+                alvoTeste.turnos_tonico != 0) {
+                fprintf(stderr, "Falha sanitaria: limpeza de buffs, debuffs e acumulacoes pos-combate.\n");
                 goto limpeza;
             }
         }

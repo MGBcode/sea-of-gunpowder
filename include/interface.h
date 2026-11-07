@@ -57,6 +57,9 @@ typedef struct {
     int estoques_loja[3];
     float timer_turno_inimigo;
     float timer_destaque_acao;
+    float timer_indicador_dano;
+    int scroll_detalhes;
+    int scroll_mochila;
     int linha_destaque_acao;
     int coluna_destaque_acao;
     int linha_origem_acao;

@@ -1,5 +1,6 @@
 #include "dados_jogo.h"
 
+#include "combate.h"
 #include "raylib.h"
 
 #include <limits.h>
@@ -75,7 +76,7 @@ bool criarPirataInicial(int indice, Combatente *destino)
         "Bucaneiro", "Timoneiro", "Cozinheiro", "Capitao", "Gavea"
     };
     static const int vidas[TOTAL_PIRATAS_PREDEFINIDOS] = { 150, 250, 200, 170, 120 };
-    static const int velocidades[TOTAL_PIRATAS_PREDEFINIDOS] = { 9, 4, 6, 7, 5 };
+    static const int velocidades[TOTAL_PIRATAS_PREDEFINIDOS] = { 9, 5, 5, 7, 6 };
     static const int precisao[TOTAL_PIRATAS_PREDEFINIDOS] = { 90, 60, 100, 70, 40 };
     static const int estamina[TOTAL_PIRATAS_PREDEFINIDOS][6] = {
         { 5, 7, 7, 10, 10, 10 },
@@ -104,6 +105,9 @@ bool criarPirataInicial(int indice, Combatente *destino)
                           EFEITO_DANO, ATAQUE_DASH_CARDEAL);
         destino->habilidades[0].duracao_efeito = 3;
         destino->habilidades[1].duracao_efeito = 1;
+        destino->habilidades[1].fogo_amigo = true;
+        destino->habilidades[2].fogo_amigo = true;
+        destino->habilidades[2].perfurante = true;
     } else if (indice == CLASSE_TIMONEIRO) {
         definirHabilidade(&destino->habilidades[0], "Pancada", 70, 100, 60, 1, 2,
                           EFEITO_DANO, ATAQUE_MELEE);
@@ -113,6 +117,7 @@ bool criarPirataInicial(int indice, Combatente *destino)
                           EFEITO_DESNORTEAR, ATAQUE_AREA_1X3);
         destino->habilidades[1].duracao_efeito = 1;
         destino->habilidades[2].duracao_efeito = 2;
+        destino->habilidades[2].fogo_amigo = true;
     } else if (indice == CLASSE_COZINHEIRO) {
         definirHabilidade(&destino->habilidades[0], "Comida da Boa", 0, 35, 100, 2, 2,
                           EFEITO_CURA, ATAQUE_RANGED);
@@ -120,6 +125,7 @@ bool criarPirataInicial(int indice, Combatente *destino)
                           EFEITO_DANO, ATAQUE_CONE);
         definirHabilidade(&destino->habilidades[2], "Hora do Rango", 0, 70, 100, 1, 6,
                           EFEITO_CURA, ATAQUE_AREA_2X3);
+        destino->habilidades[1].fogo_amigo = true;
     } else if (indice == CLASSE_CAPITAO) {
         destino->precisao_ranged = 60;
         definirHabilidade(&destino->habilidades[0], "Saquear", 75, 100, 70, 2, 2,
@@ -177,7 +183,6 @@ bool criarInimigoInicial(int indice, Combatente *destino)
                           EFEITO_DANO, ATAQUE_LINHA);
         definirHabilidade(&destino->habilidades[1], "Granada", 40, 55, 60, 2, 4,
                           EFEITO_BOMBA, ATAQUE_CRUZ);
-        destino->habilidades[0].fogo_amigo = true;
         destino->habilidades[1].fogo_amigo = true;
     } else if (indice == INIMIGO_ATIRADOR_MAGRELO) {
         definirHabilidade(&destino->habilidades[0], "Disparo Pesado", 25, 60, 35, 4, 2,
@@ -215,6 +220,7 @@ bool criarChefeFinal(Combatente *destino)
                       EFEITO_DANO, ATAQUE_LINHA);
     definirHabilidade(&destino->habilidades[2], "Tirano dos Mares", 50, 70, 60, 5, 13,
                       EFEITO_BOMBA, ATAQUE_AREA_3X2);
+    destino->habilidades[2].fogo_amigo = true;
     return true;
 }
 
@@ -440,6 +446,7 @@ bool aplicarRecompensaRota(TipoNoRota tipoRota, Combatente tripulacao[],
         if (!pirata->aliado || !pirata->vivo) {
             continue;
         }
+        limparEfeitosPosCombate(pirata);
         if (niveis > 0) {
             if (!subirNivelPirata(pirata, niveis)) {
                 return false;

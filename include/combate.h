@@ -28,5 +28,7 @@ void executarAtaqueOuHabilidade(Tabuleiro3x6 *mapa, Combatente *atacante, int in
 void iniciarDescanso(Tabuleiro3x6 *mapa, Combatente *unidade);
 // Aplica efeitos de status no início do turno.
 void processarStatusInicioTurno(Tabuleiro3x6 *mapa, Combatente *unidade);
+// Remove todos os buffs, debuffs e acúmulos temporários ao encerrar um combate.
+void limparEfeitosPosCombate(Combatente *unidade);
 
 #endif

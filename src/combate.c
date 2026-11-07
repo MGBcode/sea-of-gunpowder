@@ -4,6 +4,7 @@
 #include "raylib.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 static Combatente bossGrunts[2];
 static const Combatente *venenoAtivoNesteTurno = NULL;
@@ -365,8 +366,11 @@ bool moverCombatente3x6(Tabuleiro3x6 *mapa, Combatente *unidade, int destinoLinh
     unidade->linha = destinoLinha;
     unidade->coluna = destinoColuna;
     mapa->celulas[destinoLinha][destinoColuna] = unidade;
+    (void)memset(mapa->ultimo_dano_celula, 0, sizeof(mapa->ultimo_dano_celula));
+    (void)memset(mapa->ultima_cura_celula, 0, sizeof(mapa->ultima_cura_celula));
     if (mapa->mina_ativa[destinoLinha][destinoColuna] > 0) {
         mapa->mina_ativa[destinoLinha][destinoColuna] = 0;
+        mapa->ultimo_dano_celula[destinoLinha][destinoColuna] += 50;
         subtrairVida(mapa, unidade, 50);
     }
     if (bossFaseDois && unidade->vivo) {
@@ -627,6 +631,9 @@ static int aplicarDano(Tabuleiro3x6 *mapa, Combatente *atacante, Combatente *alv
     if (recebido < 1) {
         recebido = 1;
     }
+    if (mapa != NULL && coordenadaValida(alvo->linha, alvo->coluna)) {
+        mapa->ultimo_dano_celula[alvo->linha][alvo->coluna] += recebido;
+    }
     subtrairVida(mapa, alvo, recebido);
     return recebido;
 }
@@ -644,11 +651,11 @@ static bool habilidadeAfetaCelula(const Habilidade *habilidade, const Combatente
         habilidade->tipo_ataque == ATAQUE_DASH_CARDEAL) {
         if (deltaLinha == 0) {
             return linha == alvoLinha && (coluna - atacante->coluna) * deltaColuna > 0 &&
-                   abs(coluna - atacante->coluna) <= abs(deltaColuna);
+                   abs(coluna - atacante->coluna) <= habilidade->alcance;
         }
         if (deltaColuna == 0) {
             return coluna == alvoColuna && (linha - atacante->linha) * deltaLinha > 0 &&
-                   abs(linha - atacante->linha) <= abs(deltaLinha);
+                   abs(linha - atacante->linha) <= habilidade->alcance;
         }
     }
     if (habilidade->tipo_ataque == ATAQUE_CRUZ) {
@@ -670,10 +677,10 @@ static bool habilidadeAfetaCelula(const Habilidade *habilidade, const Combatente
         return false;
     }
     if (habilidade->tipo_ataque == ATAQUE_AREA_1X3) {
-        if (abs(deltaLinha) > abs(deltaColuna)) {
-            return linha == alvoLinha && abs(coluna - alvoColuna) <= 1;
+        if (alvoColuna != atacante->coluna) {
+            return coluna == alvoColuna && abs(linha - atacante->linha) <= 1;
         }
-        return coluna == alvoColuna && abs(linha - alvoLinha) <= 1;
+        return linha == alvoLinha && abs(coluna - atacante->coluna) <= 1;
     }
     if (habilidade->tipo_ataque == ATAQUE_AREA_2X3) {
         int linhaExtra = (alvoLinha != atacante->linha) ? alvoLinha :
@@ -691,11 +698,40 @@ static bool habilidadeAfetaCelula(const Habilidade *habilidade, const Combatente
     return false;
 }
 
-// Aplica cura, buff, debuff ou knockback axial ao combatente atingido.
+// Empurra o combatente 1 casa na direção axial caso a célula de destino esteja livre.
+static void aplicarKnockbackUnidade(Tabuleiro3x6 *mapa, Combatente *alvo,
+                                    int dirAxialLinha, int dirAxialColuna)
+{
+    int destinoLin;
+    int destinoCol;
+    if (mapa == NULL || alvo == NULL || !alvo->vivo) {
+        return;
+    }
+    destinoLin = alvo->linha + dirAxialLinha;
+    destinoCol = alvo->coluna + dirAxialColuna;
+    if (coordenadaValida(destinoLin, destinoCol) &&
+        mapa->celulas[destinoLin][destinoCol] == NULL) {
+        mapa->celulas[alvo->linha][alvo->coluna] = NULL;
+        alvo->linha = destinoLin;
+        alvo->coluna = destinoCol;
+        mapa->celulas[destinoLin][destinoCol] = alvo;
+        if (mapa->mina_ativa[destinoLin][destinoCol] > 0) {
+            mapa->mina_ativa[destinoLin][destinoCol] = 0;
+            mapa->ultimo_dano_celula[destinoLin][destinoCol] += 50;
+            subtrairVida(mapa, alvo, 50);
+        }
+    }
+}
+
+// Aplica cura, buff ou debuff ao combatente atingido.
 static void aplicarEfeito(Tabuleiro3x6 *mapa, Combatente *atacante, Combatente *alvo,
                           const Habilidade *habilidade, int indiceHabilidade,
                           int dirAxialLinha, int dirAxialColuna)
 {
+    (void)mapa;
+    (void)indiceHabilidade;
+    (void)dirAxialLinha;
+    (void)dirAxialColuna;
     if (alvo == NULL || !alvo->vivo) {
         return;
     }
@@ -743,28 +779,9 @@ static void aplicarEfeito(Tabuleiro3x6 *mapa, Combatente *atacante, Combatente *
                 alvo->valor_cura_hot = 1;
             }
         }
-    } else if (habilidade->efeito == EFEITO_DESNORTEAR ||
-               (habilidade->efeito == EFEITO_KNOCKBACK && indiceHabilidade == 2)) {
-        if (habilidade->efeito == EFEITO_DESNORTEAR) {
-            alvo->turnos_desnorteado = habilidade->duracao_efeito > 0 ?
-                                        habilidade->duracao_efeito : 2;
-        }
-        if ((atacante->aliado && atacante->classe == CLASSE_TIMONEIRO && indiceHabilidade == 2) ||
-            habilidade->efeito == EFEITO_KNOCKBACK) {
-            int destinoLin = alvo->linha + dirAxialLinha;
-            int destinoCol = alvo->coluna + dirAxialColuna;
-            if (coordenadaValida(destinoLin, destinoCol) &&
-                mapa->celulas[destinoLin][destinoCol] == NULL) {
-                mapa->celulas[alvo->linha][alvo->coluna] = NULL;
-                alvo->linha = destinoLin;
-                alvo->coluna = destinoCol;
-                mapa->celulas[destinoLin][destinoCol] = alvo;
-                if (mapa->mina_ativa[destinoLin][destinoCol] > 0) {
-                    mapa->mina_ativa[destinoLin][destinoCol] = 0;
-                    subtrairVida(mapa, alvo, 50);
-                }
-            }
-        }
+    } else if (habilidade->efeito == EFEITO_DESNORTEAR) {
+        alvo->turnos_desnorteado = habilidade->duracao_efeito > 0 ?
+                                    habilidade->duracao_efeito : 2;
     } else if (habilidade->efeito == EFEITO_CURA_CONTINUA) {
         alvo->turnos_cura_hot = habilidade->duracao_efeito > 0 ?
                                 habilidade->duracao_efeito : 3;
@@ -777,6 +794,9 @@ static void aplicarEfeito(Tabuleiro3x6 *mapa, Combatente *atacante, Combatente *
         alvo->vida_atual += cura;
         if (alvo->vida_atual > alvo->vida_maxima) {
             alvo->vida_atual = alvo->vida_maxima;
+        }
+        if (mapa != NULL && coordenadaValida(alvo->linha, alvo->coluna)) {
+            mapa->ultima_cura_celula[alvo->linha][alvo->coluna] += cura;
         }
     }
 }
@@ -794,6 +814,11 @@ static bool ataqueValido(const Combatente *atacante, const Habilidade *habilidad
     }
     if (habilidade->tipo_ataque == ATAQUE_AREA_2X3) {
         return abs(alvoLinha - atacante->linha) <= 1 &&
+               abs(alvoColuna - atacante->coluna) <= 1;
+    }
+    if (habilidade->tipo_ataque == ATAQUE_AREA_1X3) {
+        return (alvoLinha != atacante->linha || alvoColuna != atacante->coluna) &&
+               abs(alvoLinha - atacante->linha) <= 1 &&
                abs(alvoColuna - atacante->coluna) <= 1;
     }
     if (habilidade->tipo_ataque == ATAQUE_CONE) {
@@ -858,7 +883,7 @@ static bool caminhoAtaqueLivre(const Tabuleiro3x6 *mapa, const Combatente *ataca
     return true;
 }
 
-// Executa o Avanço Impetuoso do Bucaneiro seguindo os 4 passos do Edge Case 1.
+// Executa o Avanço Impetuoso do Bucaneiro atingindo inimigos (100%) e aliados (50%) na linha.
 static void executarAvancoImpetuoso(Tabuleiro3x6 *mapa, Combatente *atacante,
                                     const Habilidade *habilidade, int indiceHab,
                                     int dirLinha, int dirColuna)
@@ -867,11 +892,10 @@ static void executarAvancoImpetuoso(Tabuleiro3x6 *mapa, Combatente *atacante,
     int origCol = atacante->coluna;
     int linDist2 = origLin + 2 * dirLinha;
     int colDist2 = origCol + 2 * dirColuna;
-    bool inimigoEmDist2 = coordenadaValida(linDist2, colDist2) &&
+    bool unidadeEmDist2 = coordenadaValida(linDist2, colDist2) &&
                           mapa->celulas[linDist2][colDist2] != NULL &&
-                          mapa->celulas[linDist2][colDist2]->vivo &&
-                          mapa->celulas[linDist2][colDist2]->aliado != atacante->aliado;
-    int distParada = inimigoEmDist2 ? 3 : 2;
+                          mapa->celulas[linDist2][colDist2]->vivo;
+    int distParada = unidadeEmDist2 ? 3 : 2;
     int curaRouboVida = 0;
     int dist;
     for (dist = 1; dist <= 2; dist++) {
@@ -887,12 +911,17 @@ static void executarAvancoImpetuoso(Tabuleiro3x6 *mapa, Combatente *atacante,
             mapa->mina_ativa[celLin][celCol] = 0;
         }
         alvo = mapa->celulas[celLin][celCol];
-        if (alvo == NULL || !alvo->vivo || alvo->aliado == atacante->aliado) {
+        if (alvo == NULL || !alvo->vivo || alvo == atacante) {
+            continue;
+        }
+        if (alvo->aliado == atacante->aliado && !habilidade->fogo_amigo) {
             continue;
         }
         dano = calcularDanoFinal(mapa, atacante, alvo, habilidade, indiceHab, dist);
-        danoCausado = aplicarDano(mapa, atacante, alvo, dano, false);
-        curaRouboVida += danoCausado / 2;
+        danoCausado = aplicarDano(mapa, atacante, alvo, dano, habilidade->fogo_amigo);
+        if (alvo->aliado != atacante->aliado) {
+            curaRouboVida += danoCausado / 2;
+        }
     }
     if (curaRouboVida > 0 && atacante->vivo) {
         atacante->vida_atual += curaRouboVida;
@@ -915,10 +944,15 @@ static void executarAvancoImpetuoso(Tabuleiro3x6 *mapa, Combatente *atacante,
             mapa->celulas[novaLin][novaCol] = atacante;
             if (mapa->mina_ativa[novaLin][novaCol] > 0) {
                 mapa->mina_ativa[novaLin][novaCol] = 0;
+                mapa->ultimo_dano_celula[novaLin][novaCol] += 50;
                 subtrairVida(mapa, atacante, 50);
             }
             break;
         }
+    }
+    if (curaRouboVida > 0 && atacante->vivo &&
+        coordenadaValida(atacante->linha, atacante->coluna)) {
+        mapa->ultima_cura_celula[atacante->linha][atacante->coluna] += curaRouboVida;
     }
 }
 
@@ -928,6 +962,10 @@ void executarAtaqueOuHabilidade(Tabuleiro3x6 *mapa, Combatente *atacante, int in
 {
     Habilidade *habilidade;
     Combatente *alvoClique;
+    Combatente *alvosAtingidosLista[LINHAS_TABULEIRO * COLUNAS_TABULEIRO];
+    int distAlvosLista[LINHAS_TABULEIRO * COLUNAS_TABULEIRO];
+    int totalAlvosLista = 0;
+    int indiceAlvo;
     int distancia;
     int custo;
     int linha;
@@ -936,7 +974,7 @@ void executarAtaqueOuHabilidade(Tabuleiro3x6 *mapa, Combatente *atacante, int in
     int dirAxialColuna;
     bool area;
     bool clicouEmMina;
-    bool coneBloqueadoEmDist1 = false;
+    bool temKnockback;
     if (mapa == NULL || atacante == NULL || !atacante->vivo ||
         indiceHab < 0 || indiceHab >= atacante->habilidades_desbloqueadas ||
         indiceHab >= MAX_HABILIDADES || !coordenadaValida(alvoLinha, alvoColuna)) {
@@ -977,12 +1015,20 @@ void executarAtaqueOuHabilidade(Tabuleiro3x6 *mapa, Combatente *atacante, int in
         (alvoClique == NULL || alvoClique->aliado == atacante->aliado)) {
         return;
     }
+    (void)memset(mapa->ultimo_dano_celula, 0, sizeof(mapa->ultimo_dano_celula));
+    (void)memset(mapa->ultima_cura_celula, 0, sizeof(mapa->ultima_cura_celula));
     atacante->estamina_atual -= custo;
     dirAxialLinha = (alvoLinha > atacante->linha) ? 1 :
                     ((alvoLinha < atacante->linha) ? -1 : 0);
     dirAxialColuna = (alvoColuna > atacante->coluna) ? 1 :
                      ((alvoColuna < atacante->coluna) ? -1 : 0);
-    if (abs(alvoLinha - atacante->linha) > abs(alvoColuna - atacante->coluna)) {
+    if (habilidade->tipo_ataque == ATAQUE_AREA_1X3) {
+        if (alvoColuna != atacante->coluna) {
+            dirAxialLinha = 0;
+        } else {
+            dirAxialColuna = 0;
+        }
+    } else if (abs(alvoLinha - atacante->linha) > abs(alvoColuna - atacante->coluna)) {
         dirAxialColuna = 0;
     } else if (abs(alvoColuna - atacante->coluna) > abs(alvoLinha - atacante->linha)) {
         dirAxialLinha = 0;
@@ -1008,16 +1054,16 @@ void executarAtaqueOuHabilidade(Tabuleiro3x6 *mapa, Combatente *atacante, int in
             return;
         }
     }
+    temKnockback = (atacante->aliado && atacante->classe == CLASSE_TIMONEIRO && indiceHab == 2) ||
+                   habilidade->efeito == EFEITO_KNOCKBACK;
     if (habilidade->tipo_ataque == ATAQUE_LINHA) {
         int limiteAlvos = habilidade->perfurante ?
                           (COLUNAS_TABULEIRO + LINHAS_TABULEIRO) : 1;
-        int alvosAtingidos = 0;
         int passo;
         for (passo = 1; passo <= habilidade->alcance; passo++) {
             int celLin = atacante->linha + passo * dirAxialLinha;
             int celCol = atacante->coluna + passo * dirAxialColuna;
             Combatente *alvoLinhaAtual;
-            int precisao;
             if (!coordenadaValida(celLin, celCol)) {
                 break;
             }
@@ -1025,37 +1071,40 @@ void executarAtaqueOuHabilidade(Tabuleiro3x6 *mapa, Combatente *atacante, int in
                 mapa->mina_ativa[celLin][celCol] = 0;
             }
             alvoLinhaAtual = mapa->celulas[celLin][celCol];
-            if (alvoLinhaAtual == NULL || !alvoLinhaAtual->vivo) {
+            if (alvoLinhaAtual == NULL || !alvoLinhaAtual->vivo || alvoLinhaAtual == atacante) {
                 continue;
             }
             if (alvoLinhaAtual->aliado == atacante->aliado && !habilidade->fogo_amigo) {
                 continue;
             }
-            alvosAtingidos++;
-            {
-                int dano = calcularDanoFinal(mapa, atacante, alvoLinhaAtual,
-                                             habilidade, indiceHab, passo);
-                (void)aplicarDano(mapa, atacante, alvoLinhaAtual, dano,
-                                  habilidade->fogo_amigo);
-                aplicarEfeito(mapa, atacante, alvoLinhaAtual, habilidade, indiceHab,
-                              dirAxialLinha, dirAxialColuna);
-            }
-            (void)precisao;
-            if (alvosAtingidos >= limiteAlvos || !atacante->vivo) {
+            alvosAtingidosLista[totalAlvosLista] = alvoLinhaAtual;
+            distAlvosLista[totalAlvosLista] = passo;
+            totalAlvosLista++;
+            if (totalAlvosLista >= limiteAlvos) {
                 break;
             }
         }
-        return;
-    }
-    if (habilidade->tipo_ataque == ATAQUE_CONE) {
-        int linDist1 = atacante->linha + dirAxialLinha;
-        int colDist1 = atacante->coluna + dirAxialColuna;
-        if (coordenadaValida(linDist1, colDist1) &&
-            mapa->celulas[linDist1][colDist1] != NULL &&
-            mapa->celulas[linDist1][colDist1]->vivo &&
-            mapa->celulas[linDist1][colDist1]->aliado != atacante->aliado) {
-            coneBloqueadoEmDist1 = true;
+        for (indiceAlvo = 0; indiceAlvo < totalAlvosLista; indiceAlvo++) {
+            Combatente *alvoAtual = alvosAtingidosLista[indiceAlvo];
+            int distAtual = distAlvosLista[indiceAlvo];
+            int dano = calcularDanoFinal(mapa, atacante, alvoAtual,
+                                         habilidade, indiceHab, distAtual);
+            (void)aplicarDano(mapa, atacante, alvoAtual, dano, habilidade->fogo_amigo);
+            if (alvoAtual->vivo) {
+                aplicarEfeito(mapa, atacante, alvoAtual, habilidade, indiceHab,
+                              dirAxialLinha, dirAxialColuna);
+            }
+            if (!atacante->vivo) {
+                return;
+            }
         }
+        if (temKnockback) {
+            for (indiceAlvo = totalAlvosLista - 1; indiceAlvo >= 0; indiceAlvo--) {
+                aplicarKnockbackUnidade(mapa, alvosAtingidosLista[indiceAlvo],
+                                        dirAxialLinha, dirAxialColuna);
+            }
+        }
+        return;
     }
     area = habilidade->tipo_ataque == ATAQUE_CRUZ ||
            habilidade->tipo_ataque == ATAQUE_CONE ||
@@ -1075,10 +1124,6 @@ void executarAtaqueOuHabilidade(Tabuleiro3x6 *mapa, Combatente *atacante, int in
                                            alvoColuna, linha, coluna)) {
                     continue;
                 }
-                if (habilidade->tipo_ataque == ATAQUE_CONE && coneBloqueadoEmDist1 &&
-                    distEfetiva > 1) {
-                    continue;
-                }
             } else if (linha != alvoLinha || coluna != alvoColuna) {
                 continue;
             }
@@ -1087,6 +1132,13 @@ void executarAtaqueOuHabilidade(Tabuleiro3x6 *mapa, Combatente *atacante, int in
             }
             alvoCelula = mapa->celulas[linha][coluna];
             if (alvoCelula == NULL || !alvoCelula->vivo) {
+                continue;
+            }
+            if (area && alvoCelula == atacante &&
+                habilidade->efeito != EFEITO_CURA &&
+                habilidade->efeito != EFEITO_CURA_CONTINUA &&
+                habilidade->efeito != EFEITO_MOTIVACAO &&
+                habilidade->efeito != EFEITO_VENENO) {
                 continue;
             }
             if (habilidade->efeito == EFEITO_CURA ||
@@ -1099,31 +1151,47 @@ void executarAtaqueOuHabilidade(Tabuleiro3x6 *mapa, Combatente *atacante, int in
                        habilidade->efeito != EFEITO_VENENO) {
                 continue;
             }
-            if (habilidade->dano_max > 0 &&
-                (habilidade->efeito == EFEITO_DANO ||
-                 habilidade->efeito == EFEITO_BOMBA ||
-                 habilidade->efeito == EFEITO_SANGRAMENTO ||
-                 habilidade->efeito == EFEITO_VENENO ||
-                 habilidade->efeito == EFEITO_ESTUNAR ||
-                 habilidade->efeito == EFEITO_DESNORTEAR ||
-                 habilidade->efeito == EFEITO_KNOCKBACK)) {
-                int dano = calcularDanoFinal(mapa, atacante, alvoCelula, habilidade,
-                                             indiceHab, distEfetiva);
-                (void)aplicarDano(mapa, atacante, alvoCelula, dano, habilidade->fogo_amigo);
+            alvosAtingidosLista[totalAlvosLista] = alvoCelula;
+            distAlvosLista[totalAlvosLista] = distEfetiva;
+            totalAlvosLista++;
+        }
+    }
+    for (indiceAlvo = 0; indiceAlvo < totalAlvosLista; indiceAlvo++) {
+        Combatente *alvoCelula = alvosAtingidosLista[indiceAlvo];
+        int distEfetiva = distAlvosLista[indiceAlvo];
+        if (!alvoCelula->vivo) {
+            continue;
+        }
+        if (habilidade->dano_max > 0 &&
+            (habilidade->efeito == EFEITO_DANO ||
+             habilidade->efeito == EFEITO_BOMBA ||
+             habilidade->efeito == EFEITO_SANGRAMENTO ||
+             habilidade->efeito == EFEITO_VENENO ||
+             habilidade->efeito == EFEITO_ESTUNAR ||
+             habilidade->efeito == EFEITO_DESNORTEAR ||
+             habilidade->efeito == EFEITO_KNOCKBACK)) {
+            int dano = calcularDanoFinal(mapa, atacante, alvoCelula, habilidade,
+                                         indiceHab, distEfetiva);
+            (void)aplicarDano(mapa, atacante, alvoCelula, dano, habilidade->fogo_amigo);
+        }
+        if (alvoCelula->vivo && atacante->eh_boss && atacante->fase_boss == 2 &&
+            (indiceHab == 0 || indiceHab == 2)) {
+            if (alvoCelula->turnos_veneno <= 0) {
+                alvoCelula->turnos_veneno = 2;
             }
-            if (alvoCelula->vivo && atacante->eh_boss && atacante->fase_boss == 2 &&
-                (indiceHab == 0 || indiceHab == 2)) {
-                if (alvoCelula->turnos_veneno <= 0) {
-                    alvoCelula->turnos_veneno = 2;
-                }
-            }
-            if (alvoCelula->vivo) {
-                aplicarEfeito(mapa, atacante, alvoCelula, habilidade, indiceHab,
-                              dirAxialLinha, dirAxialColuna);
-            }
-            if (!atacante->vivo) {
-                return;
-            }
+        }
+        if (alvoCelula->vivo) {
+            aplicarEfeito(mapa, atacante, alvoCelula, habilidade, indiceHab,
+                          dirAxialLinha, dirAxialColuna);
+        }
+        if (!atacante->vivo) {
+            return;
+        }
+    }
+    if (temKnockback) {
+        for (indiceAlvo = totalAlvosLista - 1; indiceAlvo >= 0; indiceAlvo--) {
+            aplicarKnockbackUnidade(mapa, alvosAtingidosLista[indiceAlvo],
+                                    dirAxialLinha, dirAxialColuna);
         }
     }
 }
@@ -1217,5 +1285,48 @@ void processarStatusInicioTurno(Tabuleiro3x6 *mapa, Combatente *unidade)
     if (unidade->turnos_atordoado > 0) {
         unidade->turnos_atordoado--;
         unidade->turno_perdido = true;
+    }
+}
+
+// Remove todos os buffs, debuffs e acúmulos temporários ao encerrar um combate.
+void limparEfeitosPosCombate(Combatente *unidade)
+{
+    if (unidade == NULL) {
+        return;
+    }
+    if (unidade->turnos_motivacao > 0 && unidade->estamina_maxima > 1) {
+        unidade->estamina_maxima -= 1;
+    }
+    unidade->em_descanso = false;
+    unidade->atacado_no_descanso = false;
+    unidade->turno_perdido = false;
+    unidade->usou_consumivel_gratis_turno = false;
+    unidade->motivado_capitao = false;
+    unidade->bonus_estamina_proximo_turno = 0;
+    unidade->golpes_corte_bucaneiro_recebidos = 0;
+    unidade->golpes_corte_grunt_recebidos = 0;
+    unidade->turnos_motivacao = 0;
+    unidade->turnos_atordoado = 0;
+    unidade->turnos_sangramento = 0;
+    unidade->turnos_veneno = 0;
+    unidade->turnos_desnorteado = 0;
+    unidade->turnos_desmoralizado = 0;
+    unidade->turnos_tonico = 0;
+    unidade->bonus_tonico_percentual = 0;
+    unidade->turnos_cura_hot = 0;
+    unidade->valor_cura_hot = 0;
+    unidade->estamina_atual = unidade->estamina_maxima;
+    if (venenoAtivoNesteTurno == unidade) {
+        venenoAtivoNesteTurno = NULL;
+    }
+    if (desmoralizadoAtivoNesteTurno == unidade) {
+        desmoralizadoAtivoNesteTurno = NULL;
+    }
+    if (motivadoAtivoNesteTurno == unidade) {
+        motivadoAtivoNesteTurno = NULL;
+    }
+    if (tonicoAtivoNesteTurno == unidade) {
+        tonicoAtivoNesteTurno = NULL;
+        bonusTonicoAtivoNesteTurno = 0;
     }
 }
