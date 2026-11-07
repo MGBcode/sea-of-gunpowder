@@ -9,6 +9,8 @@ static Combatente bossGrunts[2];
 static const Combatente *venenoAtivoNesteTurno = NULL;
 static const Combatente *desmoralizadoAtivoNesteTurno = NULL;
 static const Combatente *motivadoAtivoNesteTurno = NULL;
+static const Combatente *tonicoAtivoNesteTurno = NULL;
+static int bonusTonicoAtivoNesteTurno = 0;
 
 // Verifica se uma coordenada pertence ao tabuleiro 3x6.
 static bool coordenadaValida(int linha, int coluna)
@@ -542,6 +544,8 @@ static int calcularDanoFinal(Tabuleiro3x6 *mapa, Combatente *atacante,
     }
     if (atacante->turnos_tonico > 0 || atacante->bonus_tonico_percentual > 0) {
         somaPctBuffs += atacante->bonus_tonico_percentual;
+    } else if (atacante == tonicoAtivoNesteTurno && bonusTonicoAtivoNesteTurno > 0) {
+        somaPctBuffs += bonusTonicoAtivoNesteTurno;
     }
     if (atacante->aliado && atacante->classe == CLASSE_BUCANEIRO &&
         (atacante->passiva_aprimorada || atacante->nivel >= 4) && alvo != NULL) {
@@ -672,11 +676,11 @@ static bool habilidadeAfetaCelula(const Habilidade *habilidade, const Combatente
         return coluna == alvoColuna && abs(linha - alvoLinha) <= 1;
     }
     if (habilidade->tipo_ataque == ATAQUE_AREA_2X3) {
-        int linhaExtra = (alvoLinha == LINHAS_TABULEIRO - 1) ? -1 :
-                         ((alvoLinha == 0) ? 1 : (deltaLinha >= 0 ? 1 : -1));
-        return (linha == alvoLinha || linha == alvoLinha + linhaExtra ||
-                linha == atacante->linha) &&
-               abs(coluna - alvoColuna) <= 1;
+        int linhaExtra = (alvoLinha != atacante->linha) ? alvoLinha :
+                         (atacante->linha < LINHAS_TABULEIRO - 1 ?
+                          atacante->linha + 1 : atacante->linha - 1);
+        return (linha == atacante->linha || linha == linhaExtra) &&
+               abs(coluna - atacante->coluna) <= 1;
     }
     if (habilidade->tipo_ataque == ATAQUE_AREA_3X2) {
         int colunaExtra = (alvoColuna == COLUNAS_TABULEIRO - 1) ? -1 :
@@ -788,6 +792,10 @@ static bool ataqueValido(const Combatente *atacante, const Habilidade *habilidad
     if (habilidade->tipo_ataque == ATAQUE_AREA_3X2 && habilidade->alcance >= 5) {
         return true;
     }
+    if (habilidade->tipo_ataque == ATAQUE_AREA_2X3) {
+        return abs(alvoLinha - atacante->linha) <= 1 &&
+               abs(alvoColuna - atacante->coluna) <= 1;
+    }
     if (habilidade->tipo_ataque == ATAQUE_CONE) {
         int deltaLinha = alvoLinha - atacante->linha;
         int deltaColuna = alvoColuna - atacante->coluna;
@@ -802,12 +810,50 @@ static bool ataqueValido(const Combatente *atacante, const Habilidade *habilidad
     if ((permiteZero ? distancia < 0 : distancia <= 0) || distancia > habilidade->alcance) {
         return false;
     }
-    if ((habilidade->tipo_ataque == ATAQUE_MELEE ||
-         habilidade->tipo_ataque == ATAQUE_LINHA ||
-         habilidade->tipo_ataque == ATAQUE_DASH_CARDEAL ||
-         habilidade->tipo_ataque == ATAQUE_AREA_1X3) &&
-        alvoLinha != atacante->linha && alvoColuna != atacante->coluna) {
+    if (alvoLinha != atacante->linha && alvoColuna != atacante->coluna) {
         return false;
+    }
+    return true;
+}
+
+// Verifica se não há inimigo bloqueando a linha reta até o alvo em ataques não perfurantes.
+static bool caminhoAtaqueLivre(const Tabuleiro3x6 *mapa, const Combatente *atacante,
+                               const Habilidade *habilidade, int alvoLinha, int alvoColuna)
+{
+    int dirLin;
+    int dirCol;
+    int dist;
+    int passo;
+    if (mapa == NULL || atacante == NULL || habilidade == NULL) {
+        return false;
+    }
+    if (habilidade->perfurante ||
+        habilidade->tipo_ataque == ATAQUE_DASH_CARDEAL ||
+        habilidade->tipo_ataque == ATAQUE_CRUZ ||
+        habilidade->tipo_ataque == ATAQUE_AREA_1X3 ||
+        habilidade->tipo_ataque == ATAQUE_AREA_2X3 ||
+        habilidade->tipo_ataque == ATAQUE_AREA_3X2 ||
+        habilidade->tipo_ataque == ATAQUE_CONE) {
+        return true;
+    }
+    dist = distanciaEntre(atacante->linha, atacante->coluna, alvoLinha, alvoColuna);
+    if (dist <= 1) {
+        return true;
+    }
+    dirLin = (alvoLinha > atacante->linha) ? 1 : ((alvoLinha < atacante->linha) ? -1 : 0);
+    dirCol = (alvoColuna > atacante->coluna) ? 1 : ((alvoColuna < atacante->coluna) ? -1 : 0);
+    for (passo = 1; passo < dist; passo++) {
+        int celLin = atacante->linha + passo * dirLin;
+        int celCol = atacante->coluna + passo * dirCol;
+        Combatente *ocupante;
+        if (!coordenadaValida(celLin, celCol)) {
+            return false;
+        }
+        ocupante = mapa->celulas[celLin][celCol];
+        if (ocupante != NULL && ocupante->vivo &&
+            (ocupante->aliado != atacante->aliado || habilidade->fogo_amigo)) {
+            return false;
+        }
     }
     return true;
 }
@@ -898,7 +944,8 @@ void executarAtaqueOuHabilidade(Tabuleiro3x6 *mapa, Combatente *atacante, int in
     }
     habilidade = &atacante->habilidades[indiceHab];
     distancia = distanciaEntre(atacante->linha, atacante->coluna, alvoLinha, alvoColuna);
-    if (!ataqueValido(atacante, habilidade, alvoLinha, alvoColuna, distancia)) {
+    if (!ataqueValido(atacante, habilidade, alvoLinha, alvoColuna, distancia) ||
+        !caminhoAtaqueLivre(mapa, atacante, habilidade, alvoLinha, alvoColuna)) {
         return;
     }
     custo = habilidade->custo_estamina;
@@ -962,17 +1009,10 @@ void executarAtaqueOuHabilidade(Tabuleiro3x6 *mapa, Combatente *atacante, int in
         }
     }
     if (habilidade->tipo_ataque == ATAQUE_LINHA) {
-        int limiteAlvos = 1;
+        int limiteAlvos = habilidade->perfurante ?
+                          (COLUNAS_TABULEIRO + LINHAS_TABULEIRO) : 1;
         int alvosAtingidos = 0;
         int passo;
-        if (habilidade->perfurante) {
-            limiteAlvos = COLUNAS_TABULEIRO + LINHAS_TABULEIRO;
-        } else if ((!atacante->aliado &&
-                    (atacante->tipo_inimigo == INIMIGO_GRUNT_PISTOLA ||
-                     atacante->tipo_inimigo == INIMIGO_MARUJO_GORDO) &&
-                    indiceHab == 0)) {
-            limiteAlvos = 2;
-        }
         for (passo = 1; passo <= habilidade->alcance; passo++) {
             int celLin = atacante->linha + passo * dirAxialLinha;
             int celCol = atacante->coluna + passo * dirAxialColuna;
@@ -1025,6 +1065,10 @@ void executarAtaqueOuHabilidade(Tabuleiro3x6 *mapa, Combatente *atacante, int in
     for (linha = 0; linha < LINHAS_TABULEIRO; linha++) {
         for (coluna = 0; coluna < COLUNAS_TABULEIRO; coluna++) {
             int distOrigem = distanciaEntre(linha, coluna, atacante->linha, atacante->coluna);
+            int distEfetiva = (habilidade->tipo_ataque == ATAQUE_CONE) ?
+                              abs((linha - atacante->linha) * dirAxialLinha +
+                                  (coluna - atacante->coluna) * dirAxialColuna) :
+                              distOrigem;
             Combatente *alvoCelula;
             if (area) {
                 if (!habilidadeAfetaCelula(habilidade, atacante, alvoLinha,
@@ -1032,7 +1076,7 @@ void executarAtaqueOuHabilidade(Tabuleiro3x6 *mapa, Combatente *atacante, int in
                     continue;
                 }
                 if (habilidade->tipo_ataque == ATAQUE_CONE && coneBloqueadoEmDist1 &&
-                    distOrigem > 1) {
+                    distEfetiva > 1) {
                     continue;
                 }
             } else if (linha != alvoLinha || coluna != alvoColuna) {
@@ -1064,7 +1108,7 @@ void executarAtaqueOuHabilidade(Tabuleiro3x6 *mapa, Combatente *atacante, int in
                  habilidade->efeito == EFEITO_DESNORTEAR ||
                  habilidade->efeito == EFEITO_KNOCKBACK)) {
                 int dano = calcularDanoFinal(mapa, atacante, alvoCelula, habilidade,
-                                             indiceHab, distOrigem);
+                                             indiceHab, distEfetiva);
                 (void)aplicarDano(mapa, atacante, alvoCelula, dano, habilidade->fogo_amigo);
             }
             if (alvoCelula->vivo && atacante->eh_boss && atacante->fase_boss == 2 &&
@@ -1107,6 +1151,9 @@ void processarStatusInicioTurno(Tabuleiro3x6 *mapa, Combatente *unidade)
     desmoralizadoAtivoNesteTurno = unidade->turnos_desmoralizado > 0 ? unidade : NULL;
     motivadoAtivoNesteTurno = (unidade->turnos_motivacao > 0 || unidade->motivado_capitao) ?
                               unidade : NULL;
+    tonicoAtivoNesteTurno = unidade->turnos_tonico > 0 ? unidade : NULL;
+    bonusTonicoAtivoNesteTurno = unidade->turnos_tonico > 0 ?
+                                 unidade->bonus_tonico_percentual : 0;
     unidade->turno_perdido = false;
     unidade->usou_consumivel_gratis_turno = false;
     if (unidade->em_descanso) {

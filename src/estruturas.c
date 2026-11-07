@@ -306,11 +306,11 @@ static bool celulaNaArea(const Habilidade *habilidade, const Combatente *origem,
         return coluna == alvoColuna && abs(linha - alvoLinha) <= 1;
     }
     if (habilidade->tipo_ataque == ATAQUE_AREA_2X3) {
-        int linhaExtra = (alvoLinha == LINHAS_TABULEIRO - 1) ? -1 :
-                         ((alvoLinha == 0) ? 1 : (deltaLinha >= 0 ? 1 : -1));
-        return (linha == alvoLinha || linha == alvoLinha + linhaExtra ||
-                linha == origem->linha) &&
-               abs(coluna - alvoColuna) <= 1;
+        int linhaExtra = (alvoLinha != origem->linha) ? alvoLinha :
+                         (origem->linha < LINHAS_TABULEIRO - 1 ?
+                          origem->linha + 1 : origem->linha - 1);
+        return (linha == origem->linha || linha == linhaExtra) &&
+               abs(coluna - origem->coluna) <= 1;
     }
     if (habilidade->tipo_ataque == ATAQUE_AREA_3X2) {
         int colunaExtra = (alvoColuna == COLUNAS_TABULEIRO - 1) ? -1 :
@@ -347,16 +347,12 @@ ListaAlcance *calcularAreaAtuacao3x6(Tabuleiro3x6 *mapa, Combatente *origem, int
             int distancia = abs(deltaLinha) + abs(deltaColuna);
             bool cardinal = alvoLinha == origem->linha || alvoColuna == origem->coluna;
             bool permitePropriaCelula = habilidade->efeito == EFEITO_CURA ||
+                                        habilidade->efeito == EFEITO_CURA_CONTINUA ||
                                         habilidade->efeito == EFEITO_MOTIVACAO ||
                                         habilidade->efeito == EFEITO_VENENO;
             bool dentroAlcance = (permitePropriaCelula ? distancia >= 0 : distancia > 0) &&
-                                 distancia <= habilidade->alcance;
-            if (habilidade->tipo_ataque == ATAQUE_LINHA ||
-                habilidade->tipo_ataque == ATAQUE_DASH_CARDEAL ||
-                habilidade->tipo_ataque == ATAQUE_AREA_1X3 ||
-                habilidade->tipo_ataque == ATAQUE_MELEE) {
-                dentroAlcance = distancia > 0 && distancia <= habilidade->alcance && cardinal;
-            } else if (habilidade->tipo_ataque == ATAQUE_CONE) {
+                                 distancia <= habilidade->alcance && cardinal;
+            if (habilidade->tipo_ataque == ATAQUE_CONE) {
                 bool coneVertical = abs(deltaLinha) >= 1 &&
                                     abs(deltaLinha) <= habilidade->alcance &&
                                     abs(deltaColuna) < abs(deltaLinha);
@@ -364,11 +360,44 @@ ListaAlcance *calcularAreaAtuacao3x6(Tabuleiro3x6 *mapa, Combatente *origem, int
                                       abs(deltaColuna) <= habilidade->alcance &&
                                       abs(deltaLinha) < abs(deltaColuna);
                 dentroAlcance = coneVertical || coneHorizontal;
-            } else if (habilidade->tipo_ataque == ATAQUE_AREA_2X3 ||
-                       habilidade->tipo_ataque == ATAQUE_AREA_3X2) {
+                if (dentroAlcance) {
+                    int dirLin = coneVertical ? (deltaLinha > 0 ? 1 : -1) : 0;
+                    int dirCol = coneHorizontal ? (deltaColuna > 0 ? 1 : -1) : 0;
+                    int passoAxial = abs(deltaLinha * dirLin + deltaColuna * dirCol);
+                    int linDist1 = origem->linha + dirLin;
+                    int colDist1 = origem->coluna + dirCol;
+                    if (passoAxial > 1 && linDist1 >= 0 && linDist1 < LINHAS_TABULEIRO &&
+                        colDist1 >= 0 && colDist1 < COLUNAS_TABULEIRO &&
+                        mapa->celulas[linDist1][colDist1] != NULL &&
+                        mapa->celulas[linDist1][colDist1]->vivo &&
+                        mapa->celulas[linDist1][colDist1]->aliado != origem->aliado) {
+                        dentroAlcance = false;
+                    }
+                }
+            } else if (habilidade->tipo_ataque == ATAQUE_AREA_2X3) {
+                dentroAlcance = abs(deltaLinha) <= 1 && abs(deltaColuna) <= 1;
+            } else if (habilidade->tipo_ataque == ATAQUE_AREA_3X2) {
                 dentroAlcance = habilidade->alcance >= 5 ||
                                 ((permitePropriaCelula ? distancia >= 0 : distancia > 0) &&
                                  distancia <= habilidade->alcance);
+            } else if (dentroAlcance && distancia > 1 &&
+                       !habilidade->perfurante &&
+                       habilidade->tipo_ataque != ATAQUE_DASH_CARDEAL &&
+                       habilidade->tipo_ataque != ATAQUE_CRUZ &&
+                       habilidade->tipo_ataque != ATAQUE_AREA_1X3) {
+                int dirLin = (deltaLinha > 0) ? 1 : ((deltaLinha < 0) ? -1 : 0);
+                int dirCol = (deltaColuna > 0) ? 1 : ((deltaColuna < 0) ? -1 : 0);
+                int passo;
+                for (passo = 1; passo < distancia; passo++) {
+                    int celLin = origem->linha + passo * dirLin;
+                    int celCol = origem->coluna + passo * dirCol;
+                    Combatente *ocupante = mapa->celulas[celLin][celCol];
+                    if (ocupante != NULL && ocupante->vivo &&
+                        (ocupante->aliado != origem->aliado || habilidade->fogo_amigo)) {
+                        dentroAlcance = false;
+                        break;
+                    }
+                }
             }
             if (dentroAlcance) {
                 alcancavel[alvoLinha][alvoColuna] = true;

@@ -51,6 +51,7 @@ typedef struct {
     int indice_iniciativa;
     bool fase_pre_combate_ativa;
     bool saque_em_andamento;
+    bool loja_aberta_pendente;
     int total_itens_loja;
     Item itens_loja[3];
     int estoques_loja[3];

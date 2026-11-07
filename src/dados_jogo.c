@@ -118,7 +118,7 @@ bool criarPirataInicial(int indice, Combatente *destino)
                           EFEITO_CURA, ATAQUE_RANGED);
         definirHabilidade(&destino->habilidades[1], "Bacamarte", 60, 100, 100, 2, 3,
                           EFEITO_DANO, ATAQUE_CONE);
-        definirHabilidade(&destino->habilidades[2], "Hora do Rango", 0, 70, 100, 2, 6,
+        definirHabilidade(&destino->habilidades[2], "Hora do Rango", 0, 70, 100, 1, 6,
                           EFEITO_CURA, ATAQUE_AREA_2X3);
     } else if (indice == CLASSE_CAPITAO) {
         destino->precisao_ranged = 60;
@@ -212,7 +212,7 @@ bool criarChefeFinal(Combatente *destino)
     definirHabilidade(&destino->habilidades[0], "Ruina dos Covardes", 60, 80, 90, 1, 2,
                       EFEITO_DANO, ATAQUE_MELEE);
     definirHabilidade(&destino->habilidades[1], "Destruidor de Familias", 40, 55, 60, 3, 2,
-                      EFEITO_DANO, ATAQUE_RANGED);
+                      EFEITO_DANO, ATAQUE_LINHA);
     definirHabilidade(&destino->habilidades[2], "Tirano dos Mares", 50, 70, 60, 5, 13,
                       EFEITO_BOMBA, ATAQUE_AREA_3X2);
     return true;
@@ -599,16 +599,16 @@ int sortearInimigosRota(TipoNoRota tipoRota, unsigned int semente,
     return sortearInimigosPorEtapa(tipoRota, etapaInferida, semente, indices, capacidade);
 }
 
-// Sorteia os 3 itens da loja da rota com 2 unidades de estoque cada.
+// Sorteia os 3 itens da loja garantindo rotação a cada visita, fuga ou reinício.
 int sortearItensLoja(int etapaRota, unsigned int semente, Item itensLoja[],
                      int estoques[], int capacidade)
 {
+    static unsigned int sementeAcumuladaLoja = 2463534242U;
+    static int ultimosIdsSorteados[3] = { 0, 0, 0 };
     Item catalogo[TOTAL_ITENS_PREDEFINIDOS];
-    unsigned int estado = semente == 0U ? 777U : semente;
+    unsigned int estado;
     int totalCatalogo;
-    int usados[TOTAL_ITENS_PREDEFINIDOS] = { 0 };
-    int slotInicial = 0;
-    int slot;
+    int tentativa;
     if (itensLoja == NULL || estoques == NULL || capacidade < 3) {
         return 0;
     }
@@ -616,43 +616,65 @@ int sortearItensLoja(int etapaRota, unsigned int semente, Item itensLoja[],
     if (totalCatalogo < TOTAL_ITENS_PREDEFINIDOS) {
         return 0;
     }
-    if (etapaRota >= 3) {
-        itensLoja[0] = catalogo[10];
-        estoques[0] = 2;
-        usados[10] = 1;
-        slotInicial = 1;
-    }
-    for (slot = slotInicial; slot < 3; slot++) {
-        int rolagem = (int)(avancarSemente(&estado) % 100U);
-        RaridadeItem raridadeAlvo;
-        int candidatos[TOTAL_ITENS_PREDEFINIDOS];
-        int totalCandidatos = 0;
-        int indice;
-        int indiceCatalogo;
-        if (rolagem < 30) {
-            raridadeAlvo = RARIDADE_COMUM;
-        } else if (rolagem < 70) {
-            raridadeAlvo = RARIDADE_RARO;
-        } else {
-            raridadeAlvo = RARIDADE_EPICO;
+    sementeAcumuladaLoja ^= semente * 2654435761U + (unsigned int)(etapaRota * 97 +
+                            contadorFugas * 131 + contadorSaques * 53 + 17);
+    estado = avancarSemente(&sementeAcumuladaLoja);
+    for (tentativa = 0; tentativa < 24; tentativa++) {
+        int usados[TOTAL_ITENS_PREDEFINIDOS] = { 0 };
+        int slotInicial = 0;
+        int slot;
+        bool repetiuAnterior;
+        if (etapaRota >= 3) {
+            itensLoja[0] = catalogo[10];
+            estoques[0] = 2;
+            usados[10] = 1;
+            slotInicial = 1;
         }
-        for (indice = 0; indice < totalCatalogo; indice++) {
-            if (!usados[indice] && catalogo[indice].raridade == raridadeAlvo) {
-                candidatos[totalCandidatos++] = indice;
+        for (slot = slotInicial; slot < 3; slot++) {
+            int rolagem = (int)(avancarSemente(&estado) % 100U);
+            RaridadeItem raridadeAlvo;
+            int candidatos[TOTAL_ITENS_PREDEFINIDOS];
+            int totalCandidatos = 0;
+            int indice;
+            int indiceCatalogo;
+            if (rolagem < 30) {
+                raridadeAlvo = RARIDADE_COMUM;
+            } else if (rolagem < 70) {
+                raridadeAlvo = RARIDADE_RARO;
+            } else {
+                raridadeAlvo = RARIDADE_EPICO;
             }
-        }
-        if (totalCandidatos == 0) {
             for (indice = 0; indice < totalCatalogo - 1; indice++) {
-                if (!usados[indice]) {
+                if (!usados[indice] && catalogo[indice].raridade == raridadeAlvo) {
                     candidatos[totalCandidatos++] = indice;
                 }
             }
+            if (totalCandidatos == 0) {
+                for (indice = 0; indice < totalCatalogo - 1; indice++) {
+                    if (!usados[indice]) {
+                        candidatos[totalCandidatos++] = indice;
+                    }
+                }
+            }
+            indiceCatalogo = candidatos[avancarSemente(&estado) % (unsigned int)totalCandidatos];
+            usados[indiceCatalogo] = 1;
+            itensLoja[slot] = catalogo[indiceCatalogo];
+            estoques[slot] = 2;
         }
-        indiceCatalogo = candidatos[avancarSemente(&estado) % (unsigned int)totalCandidatos];
-        usados[indiceCatalogo] = 1;
-        itensLoja[slot] = catalogo[indiceCatalogo];
-        estoques[slot] = 2;
+        repetiuAnterior =
+            (itensLoja[0].id == ultimosIdsSorteados[0] &&
+             itensLoja[1].id == ultimosIdsSorteados[1] &&
+             itensLoja[2].id == ultimosIdsSorteados[2]) ||
+            (itensLoja[0].id == ultimosIdsSorteados[0] &&
+             itensLoja[1].id == ultimosIdsSorteados[2] &&
+             itensLoja[2].id == ultimosIdsSorteados[1]);
+        if (!repetiuAnterior) {
+            break;
+        }
     }
+    ultimosIdsSorteados[0] = itensLoja[0].id;
+    ultimosIdsSorteados[1] = itensLoja[1].id;
+    ultimosIdsSorteados[2] = itensLoja[2].id;
     return 3;
 }
 

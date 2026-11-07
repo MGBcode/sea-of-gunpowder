@@ -613,6 +613,10 @@ void processarFugaETrocaTripulacao(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *m
     interfaceJogo->popup_ativo = POPUP_NENHUM;
     interfaceJogo->fase_pre_combate_ativa = false;
     interfaceJogo->saque_em_andamento = false;
+    interfaceJogo->loja_aberta_pendente = false;
+    interfaceJogo->total_itens_loja =
+        sortearItensLoja(1, (unsigned int)(contadorFugas * 131 + contadorSaques * 37 + 17),
+                         interfaceJogo->itens_loja, interfaceJogo->estoques_loja, 3);
     interfaceJogo->ator_atual = NULL;
     interfaceJogo->acao_combate = ACAO_TELA_NENHUMA;
     if (*interfaceJogo->raiz_rotas == NULL) {
@@ -662,6 +666,10 @@ static void reiniciarPartidaCompleta(InterfaceJogo *interfaceJogo, Tabuleiro3x6 
     interfaceJogo->acao_combate = ACAO_TELA_NENHUMA;
     interfaceJogo->fase_pre_combate_ativa = false;
     interfaceJogo->saque_em_andamento = false;
+    interfaceJogo->loja_aberta_pendente = false;
+    interfaceJogo->total_itens_loja =
+        sortearItensLoja(1, (unsigned int)GetRandomValue(1, 100000),
+                         interfaceJogo->itens_loja, interfaceJogo->estoques_loja, 3);
     interfaceJogo->estado = TELA_SELECAO_TRIPULACAO;
 }
 
@@ -824,6 +832,7 @@ void atualizarInterface(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
         }
         if (interfaceJogo->popup_ativo == POPUP_LOJA) {
             if (retanguloClicado((Rectangle){ 740, 72, 105, 38 }, mouse)) {
+                interfaceJogo->loja_aberta_pendente = false;
                 interfaceJogo->popup_ativo = POPUP_NENHUM;
                 return;
             }
@@ -838,13 +847,29 @@ void atualizarInterface(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
                     return;
                 }
             }
-            if (retanguloClicado((Rectangle){ 220, 495, 280, 55 }, mouse)) {
+            if (retanguloClicado((Rectangle){ 185, 495, 200, 55 }, mouse) ||
+                retanguloClicado((Rectangle){ 90, 630, 190, 55 }, mouse)) {
+                if ((interfaceJogo->entidade_selecionada == NULL ||
+                     !interfaceJogo->entidade_selecionada->aliado ||
+                     !interfaceJogo->entidade_selecionada->vivo) &&
+                    interfaceJogo->total_selecionados > 0) {
+                    interfaceJogo->entidade_selecionada =
+                        pirataPorId(piratasDisponiveis, totalDisponiveis,
+                                    interfaceJogo->piratas_selecionados_ids[0]);
+                }
+                interfaceJogo->loja_aberta_pendente = true;
+                interfaceJogo->popup_ativo = POPUP_MOCHILA_BUILDS;
+                return;
+            }
+            if (retanguloClicado((Rectangle){ 400, 495, 215, 55 }, mouse)) {
+                interfaceJogo->loja_aberta_pendente = false;
                 interfaceJogo->popup_ativo = POPUP_NENHUM;
                 interfaceJogo->saque_em_andamento = true;
                 iniciarEncontro(interfaceJogo, mapa, piratasDisponiveis, totalDisponiveis);
                 return;
             }
-            if (retanguloClicado((Rectangle){ 530, 495, 260, 55 }, mouse)) {
+            if (retanguloClicado((Rectangle){ 630, 495, 195, 55 }, mouse)) {
+                interfaceJogo->loja_aberta_pendente = false;
                 interfaceJogo->popup_ativo = POPUP_NENHUM;
                 return;
             }
@@ -855,10 +880,15 @@ void atualizarInterface(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
                 (interfaceJogo->estado == TELA_MAPA_ROTAS &&
                  retanguloClicado((Rectangle){ 90, 630, 190, 55 }, mouse)) ||
                 (interfaceJogo->estado == TELA_COMBATE_3X6 &&
+                 interfaceJogo->fase_pre_combate_ativa &&
+                 retanguloClicado((Rectangle){ 370, 630, 190, 55 }, mouse)) ||
+                (interfaceJogo->estado == TELA_COMBATE_3X6 &&
+                 !interfaceJogo->fase_pre_combate_ativa &&
                  retanguloClicado((Rectangle){ 815, 630, 150, 55 }, mouse));
             if (clicouBotaoMochila ||
-                retanguloClicado((Rectangle){ 760, 68, 85, 38 }, mouse)) {
-                interfaceJogo->popup_ativo = POPUP_NENHUM;
+                retanguloClicado((Rectangle){ 740, 68, 105, 38 }, mouse)) {
+                interfaceJogo->popup_ativo = interfaceJogo->loja_aberta_pendente ?
+                                             POPUP_LOJA : POPUP_NENHUM;
                 return;
             }
             for (indice = 0; indice < interfaceJogo->total_selecionados; indice++) {
@@ -880,9 +910,16 @@ void atualizarInterface(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
                 if (alvoUso == NULL || !alvoUso->aliado || !alvoUso->vivo) {
                     alvoUso = interfaceJogo->ator_atual;
                 }
+                if ((alvoUso == NULL || !alvoUso->aliado || !alvoUso->vivo) &&
+                    interfaceJogo->total_selecionados > 0) {
+                    alvoUso = pirataPorId(piratasDisponiveis, totalDisponiveis,
+                                          interfaceJogo->piratas_selecionados_ids[0]);
+                    interfaceJogo->entidade_selecionada = alvoUso;
+                }
                 for (item = inventario->inicio; item != NULL; item = item->proximo) {
                     Rectangle linhaItem;
                     if (interfaceJogo->estado == TELA_COMBATE_3X6 &&
+                        !interfaceJogo->fase_pre_combate_ativa &&
                         item->item.tipo != ITEM_CONSUMIVEL) {
                         continue;
                     }
@@ -933,14 +970,14 @@ void atualizarInterface(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
                                 alvoUso->passiva_aprimorada = flagSalva;
                                 alvoUso->classe = classeSalva;
                             }
-                        } else if (interfaceJogo->estado == TELA_MAPA_ROTAS &&
+                        } else if ((interfaceJogo->estado == TELA_MAPA_ROTAS ||
+                                    interfaceJogo->fase_pre_combate_ativa) &&
                                    item->item.tipo == ITEM_PASSIVO &&
-                                   interfaceJogo->entidade_selecionada != NULL &&
-                                   interfaceJogo->entidade_selecionada->aliado &&
-                                   interfaceJogo->entidade_selecionada->vivo) {
+                                   alvoUso != NULL &&
+                                   alvoUso->aliado &&
+                                   alvoUso->vivo) {
                             (void)aplicarItemPassivoNoPirata(
-                                inventario, interfaceJogo->entidade_selecionada,
-                                item->item.id);
+                                inventario, alvoUso, item->item.id);
                         }
                         return;
                     }
@@ -1083,12 +1120,14 @@ void atualizarInterface(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
                 *rotaAtual = avancarParaRota(*rotaAtual, 3);
                 sementeLoja = (unsigned int)((*rotaAtual)->etapa * 97 +
                                              contadorFugas * 31 + contadorSaques * 19 +
-                                             (moedas != NULL ? *moedas : 0));
+                                             (moedas != NULL ? *moedas : 0) +
+                                             GetRandomValue(1, 10000));
                 interfaceJogo->total_itens_loja =
                     sortearItensLoja((*rotaAtual)->etapa, sementeLoja,
                                      interfaceJogo->itens_loja,
                                      interfaceJogo->estoques_loja, 3);
                 interfaceJogo->saque_em_andamento = false;
+                interfaceJogo->loja_aberta_pendente = true;
                 interfaceJogo->popup_ativo = POPUP_LOJA;
                 return;
             }
@@ -1116,6 +1155,10 @@ void atualizarInterface(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
                 montarFilaTurnos(mapa, interfaceJogo->fila_iniciativa);
             interfaceJogo->indice_iniciativa = -1;
             avancarIniciativa(interfaceJogo, mapa, piratasDisponiveis, totalDisponiveis);
+            return;
+        }
+        if (retanguloClicado((Rectangle){ 370, 630, 190, 55 }, mouse)) {
+            interfaceJogo->popup_ativo = POPUP_MOCHILA_BUILDS;
             return;
         }
         if (interfaceJogo->entidade_selecionada != NULL &&
@@ -1318,7 +1361,7 @@ static const char *descricaoPassivaInimigo(const Combatente *unidade)
         return "Acertar 3 cortes no mesmo alvo aplica Sangramento (20 dano/3t).";
     }
     if (unidade->tipo_inimigo == INIMIGO_GRUNT_PISTOLA) {
-        return "Dispara Tiro perfurante (2 alvos) e Granada em cruz (fogo amigo).";
+        return "Dispara Tiro em linha (alcance 2) e Granada em cruz (fogo amigo).";
     }
     if (unidade->tipo_inimigo == INIMIGO_ATIRADOR_MAGRELO) {
         return "Sniper de longo alcance (4 casas em linha, 25-60 dano).";
@@ -1506,11 +1549,14 @@ static void desenharMochila(const InterfaceJogo *interfaceJogo)
     NoItem *item;
     int indice = 0;
     const Combatente *selecionado = interfaceJogo->entidade_selecionada;
+    bool somenteConsumiveis = interfaceJogo->estado == TELA_COMBATE_3X6 &&
+                              !interfaceJogo->fase_pre_combate_ativa;
     DrawRectangle(160, 55, 700, 545, (Color){ 12, 19, 27, 252 });
     DrawRectangleLines(160, 55, 700, 545, GOLD);
-    desenharTexto("MOCHILA DA TRIPULACAO E BUILDS PASSIVAS", 230, 70, 21, GOLD);
-    DrawRectangle(760, 68, 85, 38, (Color){ 60, 75, 87, 255 });
-    desenharTexto("FECHAR", 772, 80, 14, RAYWHITE);
+    desenharTexto("MOCHILA DA TRIPULACAO E BUILDS PASSIVAS", 215, 70, 21, GOLD);
+    DrawRectangle(740, 68, 105, 38, (Color){ 60, 75, 87, 255 });
+    desenharTexto(interfaceJogo->loja_aberta_pendente ? "VOLTAR LOJA" : "FECHAR",
+                  interfaceJogo->loja_aberta_pendente ? 746 : 765, 80, 13, RAYWHITE);
     for (indice = 0; indice < interfaceJogo->total_selecionados; indice++) {
         int posAbaX = 180 + indice * 220;
         int idPirata = interfaceJogo->piratas_selecionados_ids[indice];
@@ -1521,7 +1567,7 @@ static void desenharMochila(const InterfaceJogo *interfaceJogo)
         desenharTexto(nomePirataPorId(idPirata),
                       posAbaX + 24, 121, 15, abaAtiva ? GOLD : RAYWHITE);
     }
-    desenharTexto(interfaceJogo->estado == TELA_COMBATE_3X6 ?
+    desenharTexto(somenteConsumiveis ?
                   "ITENS NA MOCHILA (Em combate: apenas Consumiveis podem ser usados):" :
                   "ITENS NA MOCHILA (Clique para Usar Consumivel ou Equipar Passivo):",
                   180, 158, 14, LIGHTGRAY);
@@ -1529,8 +1575,7 @@ static void desenharMochila(const InterfaceJogo *interfaceJogo)
     for (item = interfaceJogo->inventario == NULL ? NULL :
                 interfaceJogo->inventario->inicio;
          item != NULL; item = item->proximo) {
-        if (interfaceJogo->estado == TELA_COMBATE_3X6 &&
-            item->item.tipo != ITEM_CONSUMIVEL) {
+        if (somenteConsumiveis && item->item.tipo != ITEM_CONSUMIVEL) {
             continue;
         }
         if (indice < 6) {
@@ -1615,10 +1660,13 @@ static void desenharLoja(const InterfaceJogo *interfaceJogo)
         desenharTexto(descricaoItemCatalogo(item->id), 206, posItemY + 44, 14,
                       estoque > 0 ? corRaridade : DARKGRAY);
     }
-    DrawRectangle(220, 495, 280, 55, (Color){ 145, 45, 38, 255 });
-    desenharTexto("SAQUEAR LOJA (COMBATE)", 242, 513, 17, RAYWHITE);
-    DrawRectangle(530, 495, 260, 55, (Color){ 45, 115, 68, 255 });
-    desenharTexto("SEGUIR VIAGEM", 588, 513, 18, RAYWHITE);
+    DrawRectangle(185, 495, 200, 55, (Color){ 45, 95, 130, 255 });
+    DrawRectangleLines(185, 495, 200, 55, GOLD);
+    desenharTexto("MOCHILA / USAR", 215, 514, 16, RAYWHITE);
+    DrawRectangle(400, 495, 215, 55, (Color){ 145, 45, 38, 255 });
+    desenharTexto("SAQUEAR LOJA", 442, 514, 16, RAYWHITE);
+    DrawRectangle(630, 495, 195, 55, (Color){ 45, 115, 68, 255 });
+    desenharTexto("SEGUIR VIAGEM", 658, 514, 16, RAYWHITE);
 }
 
 // Desenha o pop-up modal de confirmação de desistência ("Fugir da Aventura").
@@ -1909,6 +1957,10 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
         if (interfaceJogo->fase_pre_combate_ativa) {
             DrawRectangle(90, 630, 260, 55, (Color){ 45, 125, 70, 255 });
             desenharTexto("INICIAR COMBATE", 132, 648, 19, RAYWHITE);
+            DrawRectangle(370, 630, 190, 55,
+                          interfaceJogo->popup_ativo == POPUP_MOCHILA_BUILDS ?
+                          (Color){ 65, 115, 135, 255 } : (Color){ 48, 65, 78, 255 });
+            desenharTexto("MOCHILA / ITENS", 390, 648, 16, RAYWHITE);
             DrawRectangle(975, 630, 130, 55,
                           interfaceJogo->popup_ativo == POPUP_DETALHES_PERSONAGEM ?
                           (Color){ 65, 115, 135, 255 } : (Color){ 42, 63, 76, 255 });

@@ -850,6 +850,124 @@ static bool executarTestesSanitarios(void)
             fprintf(stderr, "Falha sanitaria: escala virtual em 2560x1440.\n");
             goto limpeza;
         }
+
+        {
+            Item lojaA[3];
+            Item lojaB[3];
+            Item lojaC[3];
+            int estA[3];
+            int estB[3];
+            int estC[3];
+            int ouroCompra = 5000;
+            Combatente pirataLoja;
+            Combatente inimigoFrente;
+            Combatente inimigoTras;
+            (void)criarPirataInicial(CLASSE_BUCANEIRO, &pirataLoja);
+            if (sortearItensLoja(1, 77U, lojaA, estA, 3) != 3 ||
+                sortearItensLoja(1, 77U, lojaB, estB, 3) != 3 ||
+                sortearItensLoja(2, 77U, lojaC, estC, 3) != 3 ||
+                (lojaA[0].id == lojaB[0].id &&
+                 lojaA[1].id == lojaB[1].id &&
+                 lojaA[2].id == lojaB[2].id) ||
+                (lojaB[0].id == lojaC[0].id &&
+                 lojaB[1].id == lojaC[1].id &&
+                 lojaB[2].id == lojaC[2].id)) {
+                fprintf(stderr, "Falha sanitaria: rotacao obrigatoria de itens da loja.\n");
+                goto limpeza;
+            }
+            if (!comprarItemNaLoja(lojaA, estA, 3, 0, &mochilaTeste, &ouroCompra) ||
+                estA[0] != 1 || mochilaTeste.inicio == NULL) {
+                fprintf(stderr, "Falha sanitaria: compra antes de saque da loja.\n");
+                liberarEstruturasJogo(NULL, &mochilaTeste, NULL);
+                goto limpeza;
+            }
+            if (mochilaTeste.inicio->item.tipo == ITEM_PASSIVO) {
+                if (!aplicarItemPassivoNoPirata(&mochilaTeste, &pirataLoja,
+                                                mochilaTeste.inicio->item.id) ||
+                    pirataLoja.build_passivos.tamanho != 1) {
+                    fprintf(stderr, "Falha sanitaria: equipar passivo antes do saque da loja.\n");
+                    liberarListaItensCombatente(&pirataLoja.build_passivos);
+                    liberarEstruturasJogo(NULL, &mochilaTeste, NULL);
+                    goto limpeza;
+                }
+            } else {
+                pirataLoja.vida_atual = 10;
+                pirataLoja.estamina_atual = 0;
+                pirataLoja.turnos_sangramento = 2;
+                if (!usarItemConsumivel(&pirataLoja, &mochilaTeste.inicio->item)) {
+                    fprintf(stderr, "Falha sanitaria: usar consumivel antes do saque da loja.\n");
+                    liberarEstruturasJogo(NULL, &mochilaTeste, NULL);
+                    goto limpeza;
+                }
+            }
+            if (!saquearItensRestantesLoja(lojaA, estA, 3, &mochilaTeste) ||
+                estA[0] != 0 || estA[1] != 0 || estA[2] != 0) {
+                fprintf(stderr, "Falha sanitaria: saque dos itens restantes da loja.\n");
+                liberarListaItensCombatente(&pirataLoja.build_passivos);
+                liberarEstruturasJogo(NULL, &mochilaTeste, NULL);
+                goto limpeza;
+            }
+            liberarListaItensCombatente(&pirataLoja.build_passivos);
+            liberarEstruturasJogo(NULL, &mochilaTeste, NULL);
+
+            (void)memset(&mapaTeste, 0, sizeof(mapaTeste));
+            (void)criarPirataInicial(CLASSE_CAPITAO, &pirataLoja);
+            (void)criarInimigoInicial(INIMIGO_GRUNT_PISTOLA, &gruntPistola);
+            (void)criarInimigoInicial(INIMIGO_MARUJO_GORDO, &inimigoFrente);
+            (void)criarInimigoInicial(INIMIGO_MARUJO_GORDO, &inimigoTras);
+            pirataLoja.habilidades_desbloqueadas = 3;
+            pirataLoja.linha = 1;
+            pirataLoja.coluna = 1;
+            inimigoFrente.vida_maxima = 500;
+            inimigoFrente.vida_atual = 500;
+            inimigoFrente.linha = 0;
+            inimigoFrente.coluna = 2;
+            mapaTeste.celulas[1][1] = &pirataLoja;
+            mapaTeste.celulas[0][2] = &inimigoFrente;
+            executarAtaqueOuHabilidade(&mapaTeste, &pirataLoja, 0, 0, 2);
+            executarAtaqueOuHabilidade(&mapaTeste, &pirataLoja, 1, 0, 2);
+            if (inimigoFrente.vida_atual != 500 || inimigoFrente.turnos_desmoralizado != 0) {
+                fprintf(stderr, "Falha sanitaria: ataque na diagonal deveria ser bloqueado.\n");
+                goto limpeza;
+            }
+
+            (void)memset(&mapaTeste, 0, sizeof(mapaTeste));
+            (void)criarPirataInicial(CLASSE_GAVEA, &pirataLoja);
+            pirataLoja.linha = 1;
+            pirataLoja.coluna = 0;
+            inimigoFrente.vida_atual = 500;
+            inimigoFrente.linha = 1;
+            inimigoFrente.coluna = 1;
+            inimigoTras.vida_maxima = 500;
+            inimigoTras.vida_atual = 500;
+            inimigoTras.linha = 1;
+            inimigoTras.coluna = 2;
+            mapaTeste.celulas[1][0] = &pirataLoja;
+            mapaTeste.celulas[1][1] = &inimigoFrente;
+            mapaTeste.celulas[1][2] = &inimigoTras;
+            executarAtaqueOuHabilidade(&mapaTeste, &pirataLoja, 0, 1, 2);
+            if (inimigoTras.vida_atual != 500 || inimigoFrente.vida_atual != 500) {
+                fprintf(stderr, "Falha sanitaria: ataque nao perfurante nao pode mirar atras de inimigo.\n");
+                goto limpeza;
+            }
+            executarAtaqueOuHabilidade(&mapaTeste, &pirataLoja, 0, 1, 1);
+            if (inimigoFrente.vida_atual >= 500 || inimigoTras.vida_atual != 500) {
+                fprintf(stderr, "Falha sanitaria: ataque 1 do Gavea nao pode atravessar o 1o inimigo.\n");
+                goto limpeza;
+            }
+            gruntPistola.linha = 1;
+            gruntPistola.coluna = 3;
+            mapaTeste.celulas[1][3] = &gruntPistola;
+            inimigoFrente.aliado = true;
+            inimigoTras.aliado = true;
+            inimigoFrente.vida_atual = 500;
+            inimigoTras.vida_atual = 500;
+            executarAtaqueOuHabilidade(&mapaTeste, &gruntPistola, 0, 1, 2);
+            if (inimigoTras.vida_atual >= 500 || inimigoFrente.vida_atual != 500) {
+                fprintf(stderr, "Falha sanitaria: Tiro do Grunt Pistola nao deve atravessar o 1o alvo.\n");
+                goto limpeza;
+            }
+        }
     }
     sucesso = true;
     puts("Testes sanitarios de classes, mecanicas, reposicao pos-fuga, IA e estruturas aprovados.");

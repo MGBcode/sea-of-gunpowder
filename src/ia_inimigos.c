@@ -253,7 +253,8 @@ bool selecionarAcaoIA(Tabuleiro3x6 *mapa, Combatente *inimigo, CandidatoAcao *es
                         continue;
                     }
                     distAliado = abs(inimigo->linha - linha) + abs(inimigo->coluna - coluna);
-                    if (distAliado <= habilidade->alcance) {
+                    if (distAliado <= habilidade->alcance &&
+                        (linha == inimigo->linha || coluna == inimigo->coluna)) {
                         pctVidaAliado = (aliadoFerido->vida_atual * 100) /
                                         aliadoFerido->vida_maxima;
                         urgenciaCura = aplicarCurvaResposta(CURVE_INVERSE, pctVidaAliado);
@@ -271,10 +272,7 @@ bool selecionarAcaoIA(Tabuleiro3x6 *mapa, Combatente *inimigo, CandidatoAcao *es
             Combatente *alvo = blackboard.alvos[alvoIndice];
             int distancia = abs(inimigo->linha - alvo->linha) +
                             abs(inimigo->coluna - alvo->coluna);
-            bool exigeAlinhamento = habilidade->tipo_ataque == ATAQUE_MELEE ||
-                                    habilidade->tipo_ataque == ATAQUE_LINHA ||
-                                    habilidade->tipo_ataque == ATAQUE_DASH_CARDEAL ||
-                                    habilidade->tipo_ataque == ATAQUE_AREA_1X3;
+            bool exigeAlinhamento = habilidade->tipo_ataque != ATAQUE_AREA_3X2;
             int dano;
             int pontuacao;
             if (habilidade->tipo_ataque != ATAQUE_AREA_3X2 &&
@@ -284,6 +282,30 @@ bool selecionarAcaoIA(Tabuleiro3x6 *mapa, Combatente *inimigo, CandidatoAcao *es
             if (exigeAlinhamento &&
                 alvo->linha != inimigo->linha && alvo->coluna != inimigo->coluna) {
                 continue;
+            }
+            if (habilidade->tipo_ataque != ATAQUE_AREA_3X2 &&
+                habilidade->tipo_ataque != ATAQUE_CRUZ &&
+                habilidade->tipo_ataque != ATAQUE_AREA_1X3 &&
+                !habilidade->perfurante && distancia > 1) {
+                int dirLin = (alvo->linha > inimigo->linha) ? 1 :
+                             ((alvo->linha < inimigo->linha) ? -1 : 0);
+                int dirCol = (alvo->coluna > inimigo->coluna) ? 1 :
+                             ((alvo->coluna < inimigo->coluna) ? -1 : 0);
+                int passo;
+                bool bloqueado = false;
+                for (passo = 1; passo < distancia; passo++) {
+                    int celLin = inimigo->linha + passo * dirLin;
+                    int celCol = inimigo->coluna + passo * dirCol;
+                    Combatente *ocupante = mapa->celulas[celLin][celCol];
+                    if (ocupante != NULL && ocupante->vivo &&
+                        (ocupante->aliado != inimigo->aliado || habilidade->fogo_amigo)) {
+                        bloqueado = true;
+                        break;
+                    }
+                }
+                if (bloqueado) {
+                    continue;
+                }
             }
             if (habilidade->efeito == EFEITO_ESTUNAR &&
                 (alvo->turnos_atordoado > 0 ||
