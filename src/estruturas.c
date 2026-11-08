@@ -145,6 +145,9 @@ NoRota *avancarParaRota(NoRota *noAtual, int escolha)
 // Encerra a aventura, apaga o inventário solto e incrementa a dificuldade.
 NoRota *fugirDaAventura(NoRota *raiz, ListaItens *inventarioGeral, int *nivelDificuldade)
 {
+    if (contadorFugas >= 2) {
+        return NULL;
+    }
     liberarArvoreRotas(raiz);
     contadorFugas++;
     if (inventarioGeral != NULL) {

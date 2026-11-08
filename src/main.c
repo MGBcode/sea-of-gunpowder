@@ -59,10 +59,12 @@ static bool testarClassesEMecanicasCombate(void)
         timoneiro.habilidades[2].dano_min != 50 || timoneiro.habilidades[2].dano_max != 85 ||
         cozinheiro.vida_maxima != 200 || cozinheiro.velocidade != 5 ||
         cozinheiro.precisao_melee != 100 || cozinheiro.estamina_maxima != 5 ||
+        cozinheiro.habilidades[0].dano_max != 20 ||
         cozinheiro.habilidades[1].dano_min != 60 || cozinheiro.habilidades[1].dano_max != 100 ||
         capitao.vida_maxima != 170 || capitao.velocidade != 7 ||
         capitao.precisao_melee != 70 || capitao.precisao_ranged != 60 ||
         capitao.habilidades[0].dano_min != 75 || capitao.habilidades[0].dano_max != 100 ||
+        capitao.habilidades[1].custo_estamina != 1 ||
         capitao.habilidades[2].dano_min != 100 || capitao.habilidades[2].dano_max != 130 ||
         gavea.vida_maxima != 120 || gavea.velocidade != 6 ||
         gavea.precisao_melee != 40 || gavea.estamina_maxima != 5 ||
@@ -159,6 +161,23 @@ static bool testarClassesEMecanicasCombate(void)
         fprintf(stderr, "Falha sanitaria: progressao Nv 6 do Bucaneiro.\n");
         return false;
     }
+    {
+        int vidaNivel6 = bucaneiro.vida_maxima;
+        int danoNivel6 = bucaneiro.habilidades[0].dano_max;
+        int estaminaNivel6 = bucaneiro.estamina_maxima;
+        int vidaEsperada = (vidaNivel6 * 120) / 100;
+        int danoEsperado = (danoNivel6 * 120) / 100;
+        vidaEsperada = (vidaEsperada * 120) / 100;
+        danoEsperado = (danoEsperado * 120) / 100;
+        (void)subirNivelPirata(&bucaneiro, 2);
+        if (bucaneiro.nivel != 8 || bucaneiro.habilidades_desbloqueadas != 3 ||
+            bucaneiro.vida_maxima != vidaEsperada ||
+            bucaneiro.habilidades[0].dano_max != danoEsperado ||
+            bucaneiro.estamina_maxima != estaminaNivel6) {
+            fprintf(stderr, "Falha sanitaria: níveis acima de 6 devem melhorar status sem liberar habilidades.\n");
+            return false;
+        }
+    }
     bucaneiro.habilidades[1].precisao = 100;
     bucaneiro.habilidades[2].precisao = 100;
     (void)criarInimigoInicial(INIMIGO_MARUJO_GORDO, &inimigoA);
@@ -249,6 +268,17 @@ static bool testarClassesEMecanicasCombate(void)
     executarAtaqueOuHabilidade(&mapa, &cozinheiro, 2, 0, 2);
     if (bucaneiro.vida_atual <= 20) {
         fprintf(stderr, "Falha sanitaria: Hora do Rango (cura em area 2x3).\n");
+        return false;
+    }
+    (void)criarPirataInicial(CLASSE_BUCANEIRO, &bucaneiro);
+    bucaneiro.vida_atual = 20;
+    bucaneiro.linha = 0;
+    bucaneiro.coluna = 1;
+    mapa.celulas[0][1] = &bucaneiro;
+    cozinheiro.estamina_atual = cozinheiro.estamina_maxima;
+    executarAtaqueOuHabilidade(&mapa, &cozinheiro, 0, 0, 1);
+    if (bucaneiro.vida_atual != 50) {
+        fprintf(stderr, "Falha sanitaria: Comida da Boa deve curar 20%% da Vida Máxima.\n");
         return false;
     }
 
@@ -519,6 +549,26 @@ static bool testarClassesEMecanicasCombate(void)
             liberarEstruturasJogo(NULL, &invRota, NULL);
             return false;
         }
+        for (idxRum = 0; idxRum < 20; idxRum++) {
+            if (!aplicarRecompensaRota(ROTA_CAMINHO_1, tripulacaoRota, 1,
+                                       &invRota, 1)) {
+                fprintf(stderr, "Falha sanitaria: recompensa de combate invalida.\n");
+                moedasTripulacao = moedasSalvas;
+                liberarEstruturasJogo(NULL, &invRota, NULL);
+                return false;
+            }
+        }
+        {
+            NoItem *item;
+            for (item = invRota.inicio; item != NULL; item = item->proximo) {
+                if (item->item.id == 11) {
+                    fprintf(stderr, "Falha sanitaria: Rum de Poseidon nao pode vir de recompensas de combate.\n");
+                    moedasTripulacao = moedasSalvas;
+                    liberarEstruturasJogo(NULL, &invRota, NULL);
+                    return false;
+                }
+            }
+        }
         moedasTripulacao = moedasSalvas;
         liberarEstruturasJogo(NULL, &invRota, NULL);
 
@@ -587,7 +637,7 @@ static bool testarReposicaoTripulacaoPosFuga(void)
     NoRota *raizRotas = construirArvoreRotas(1);
     NoRota *rotaAtual = raizRotas;
     int nivelDificuldade = 1;
-    int moedas = 300;
+    int moedas = 1234;
     int indice;
     int totalItens;
 
@@ -626,6 +676,7 @@ static bool testarReposicaoTripulacaoPosFuga(void)
                                   TOTAL_PIRATAS_PREDEFINIDOS);
 
     if (interfaceJogo.estado != TELA_SELECAO_TRIPULACAO ||
+        moedas != 1234 ||
         interfaceJogo.total_selecionados != 2 ||
         interfaceJogo.total_sobreviventes_fuga != 2 ||
         piratas[CLASSE_BUCANEIRO].nivel != 3 ||
@@ -747,7 +798,8 @@ static bool executarTestesSanitarios(void)
         goto limpeza;
     }
     if (sortearItensLoja(3, 99U, itensLoja, estoquesLoja, 3) != 3 ||
-        itensLoja[0].raridade != RARIDADE_LENDARIO || estoquesLoja[0] != 2 ||
+        itensLoja[0].raridade != RARIDADE_LENDARIO || itensLoja[0].id != 11 ||
+        estoquesLoja[0] != 2 ||
         !comprarItemNaLoja(itensLoja, estoquesLoja, 3, 0, &inventario, &moedasTeste) ||
         estoquesLoja[0] != 1) {
         fprintf(stderr, "Falha sanitaria: sorteio e compra na Loja da Rota 3.\n");
@@ -790,7 +842,24 @@ static bool executarTestesSanitarios(void)
         fprintf(stderr, "Falha sanitaria: Utility AI deveria selecionar uma acao valida.\n");
         goto limpeza;
     }
+    {
+        Combatente inimigoFuga;
+        if (!criarInimigoInicial(INIMIGO_GRUNT_ESPADA, &inimigoFuga)) {
+            fprintf(stderr, "Falha sanitaria: criacao de inimigo para teste de fuga.\n");
+            goto limpeza;
+        }
+        escalonarInimigoPorRota(&inimigoFuga, ROTA_CAMINHO_1, 1, 2, false);
+        if (inimigoFuga.vida_maxima != 350) {
+            fprintf(stderr, "Falha sanitaria: a segunda fuga deve conceder +75%% de status aos inimigos.\n");
+            goto limpeza;
+        }
+    }
     (void)memset(&mapa, 0, sizeof(mapa));
+    if (boss.vida_maxima != 3000 || boss.estamina_maxima != 20 ||
+        boss.habilidades[1].custo_estamina != 3) {
+        fprintf(stderr, "Falha sanitaria: status iniciais e custo do Barba Negra.\n");
+        goto limpeza;
+    }
     boss.vida_atual = boss.vida_maxima;
     boss.vivo = true;
     boss.linha = 1;
@@ -798,7 +867,7 @@ static bool executarTestesSanitarios(void)
     mapa.celulas[1][3] = &boss;
     subtrairVida(&mapa, &boss, boss.vida_maxima / 2);
     if (!mapa.boss_fase_2_ativa || boss.fase_boss != 2 ||
-        boss.estamina_maxima != 20) {
+        boss.estamina_maxima != 30 || boss.estamina_atual != 30) {
         fprintf(stderr, "Falha sanitaria: transicao de fase do chefe.\n");
         goto limpeza;
     }
@@ -819,6 +888,56 @@ static bool executarTestesSanitarios(void)
             fprintf(stderr, "Falha sanitaria: invocacao de grunts na fase dois.\n");
             goto limpeza;
         }
+    }
+    {
+        Combatente *gruntA = NULL;
+        Combatente *gruntB = NULL;
+        int linha;
+        int coluna;
+        int vidaBoss = boss.vida_atual;
+        for (linha = 0; linha < LINHAS_TABULEIRO; linha++) {
+            for (coluna = 0; coluna < COLUNAS_TABULEIRO; coluna++) {
+                Combatente *unidade = mapa.celulas[linha][coluna];
+                if (unidade != NULL && unidade->id == 110) {
+                    gruntA = unidade;
+                } else if (unidade != NULL && unidade->id == 111) {
+                    gruntB = unidade;
+                }
+            }
+        }
+        subtrairVida(&mapa, &boss, 100);
+        if (gruntA == NULL || gruntB == NULL || boss.vida_atual != vidaBoss) {
+            fprintf(stderr, "Falha sanitaria: chefe deve ser imune enquanto os dois grunts vivem.\n");
+            goto limpeza;
+        }
+        subtrairVida(&mapa, gruntA, gruntA->vida_atual);
+        subtrairVida(&mapa, &boss, 100);
+        if (boss.vida_atual != vidaBoss) {
+            fprintf(stderr, "Falha sanitaria: chefe deve permanecer imune enquanto um grunt vive.\n");
+            goto limpeza;
+        }
+        subtrairVida(&mapa, gruntB, gruntB->vida_atual);
+        subtrairVida(&mapa, &boss, 100);
+        if (boss.vida_atual != vidaBoss - 100) {
+            fprintf(stderr, "Falha sanitaria: chefe deve voltar a receber dano após derrotar os grunts.\n");
+            goto limpeza;
+        }
+    }
+    boss.estamina_atual = 0;
+    boss.em_descanso = true;
+    boss.atacado_no_descanso = false;
+    processarStatusInicioTurno(&mapa, &boss);
+    if (boss.estamina_atual != boss.estamina_maxima || boss.em_descanso) {
+        fprintf(stderr, "Falha sanitaria: Barba Negra recupera toda estamina ao descansar sem ser atacado.\n");
+        goto limpeza;
+    }
+    boss.estamina_atual = 0;
+    boss.em_descanso = true;
+    boss.atacado_no_descanso = true;
+    processarStatusInicioTurno(&mapa, &boss);
+    if (boss.estamina_atual != boss.estamina_maxima || boss.em_descanso) {
+        fprintf(stderr, "Falha sanitaria: Barba Negra recupera toda estamina ao descansar mesmo atacado.\n");
+        goto limpeza;
     }
     (void)memset(&mapa, 0, sizeof(mapa));
     mapa.celulas[1][1] = &piratas[CLASSE_CAPITAO];
@@ -863,6 +982,31 @@ static bool executarTestesSanitarios(void)
     }
     if (!testarClassesEMecanicasCombate() || !testarReposicaoTripulacaoPosFuga()) {
         goto limpeza;
+    }
+    {
+        int fugasSalvas = contadorFugas;
+        int dificuldadeSalva = dificuldade;
+        NoRota *tentativaFuga = construirArvoreRotas(dificuldade);
+        NoRota *fugaBloqueada;
+        if (tentativaFuga == NULL) {
+            fprintf(stderr, "Falha sanitaria: arvore para validar limite de fugas.\n");
+            goto limpeza;
+        }
+        contadorFugas = 2;
+        fugaBloqueada = fugirDaAventura(tentativaFuga, NULL, &dificuldade);
+        if (fugaBloqueada != NULL || contadorFugas != 2 ||
+            dificuldade != dificuldadeSalva) {
+            fprintf(stderr, "Falha sanitaria: a terceira fuga deve ser bloqueada.\n");
+            if (fugaBloqueada != NULL) {
+                liberarEstruturasJogo(fugaBloqueada, NULL, NULL);
+            } else {
+                liberarEstruturasJogo(tentativaFuga, NULL, NULL);
+            }
+            contadorFugas = fugasSalvas;
+            goto limpeza;
+        }
+        liberarEstruturasJogo(tentativaFuga, NULL, NULL);
+        contadorFugas = fugasSalvas;
     }
     {
         Tabuleiro3x6 mapaTeste;
@@ -1015,6 +1159,21 @@ static bool executarTestesSanitarios(void)
         converterCoordenadaMouseVirtual(960, 540, 1920, 1080, &vx, &vy);
         if (vx != 640 || vy != 360) {
             fprintf(stderr, "Falha sanitaria: escala virtual em tela cheia 1920x1080.\n");
+            goto limpeza;
+        }
+        if (converterCoordenadaMouseVirtual(-1, 540, 1920, 1080, &vx, &vy) ||
+            converterCoordenadaMouseVirtual(1920, 540, 1920, 1080, &vx, &vy)) {
+            fprintf(stderr, "Falha sanitaria: cliques fora da janela nao podem ativar botoes de borda.\n");
+            goto limpeza;
+        }
+        converterCoordenadaMouseVirtual(592, 985, 1920, 1080, &vx, &vy);
+        if (vx < 300 || vx >= 490 || vy < 630 || vy >= 685) {
+            fprintf(stderr, "Falha sanitaria: area clicavel da fuga deve acompanhar o botao em 1080p.\n");
+            goto limpeza;
+        }
+        converterCoordenadaMouseVirtual(960, 712, 1920, 1080, &vx, &vy);
+        if (vx < 470 || vx >= 810 || vy < 445 || vy >= 505) {
+            fprintf(stderr, "Falha sanitaria: area clicavel de sair deve acompanhar o botao em 1080p.\n");
             goto limpeza;
         }
         converterCoordenadaMouseVirtual(1919, 1008, 1920, 1009, &vx, &vy);
@@ -1389,7 +1548,7 @@ int main(int argc, char *argv[])
         }
     }
     inicializarInterface(&interfaceJogo);
-    while (!WindowShouldClose()) {
+    while (!WindowShouldClose() && !interfaceJogo.sair_solicitado) {
         atualizarInterface(&interfaceJogo, &mapa, piratasDisponiveis,
                            TOTAL_PIRATAS_PREDEFINIDOS, &raizRotas, &rotaAtual,
                            &inventario, &moedasTripulacao, &nivelDificuldade);

@@ -119,7 +119,7 @@ bool criarPirataInicial(int indice, Combatente *destino)
         destino->habilidades[2].duracao_efeito = 2;
         destino->habilidades[2].fogo_amigo = true;
     } else if (indice == CLASSE_COZINHEIRO) {
-        definirHabilidade(&destino->habilidades[0], "Comida da Boa", 0, 35, 100, 2, 2,
+        definirHabilidade(&destino->habilidades[0], "Comida da Boa", 0, 20, 100, 2, 2,
                           EFEITO_CURA, ATAQUE_RANGED);
         definirHabilidade(&destino->habilidades[1], "Bacamarte", 60, 100, 100, 2, 3,
                           EFEITO_DANO, ATAQUE_LINHA);
@@ -131,7 +131,7 @@ bool criarPirataInicial(int indice, Combatente *destino)
         destino->precisao_ranged = 60;
         definirHabilidade(&destino->habilidades[0], "Saquear", 75, 100, 70, 2, 2,
                           EFEITO_DANO, ATAQUE_HIBRIDO_SAQUEAR);
-        definirHabilidade(&destino->habilidades[1], "Discursar", 0, 0, 70, 2, 3,
+        definirHabilidade(&destino->habilidades[1], "Discursar", 0, 0, 70, 2, 1,
                           EFEITO_MOTIVACAO, ATAQUE_RANGED);
         definirHabilidade(&destino->habilidades[2], "Enxurrada de Canhões", 100, 130, 70, 5, 6,
                           EFEITO_BOMBA, ATAQUE_AREA_3X2);
@@ -206,20 +206,20 @@ bool criarChefeFinal(Combatente *destino)
     if (destino == NULL) {
         return false;
     }
-    definirCombatente(destino, 999, "Barba Negra", 1500, 15, 8, 90, false);
+    definirCombatente(destino, 999, "Barba Negra", 3000, 20, 8, 90, false);
     destino->eh_boss = true;
     destino->fase_boss = 1;
     destino->tipo_inimigo = INIMIGO_BOSS_BARBA_NEGRA;
     destino->precisao_ranged = 60;
     destino->nivel = 6;
-    destino->estamina_por_nivel[0] = 15;
-    destino->estamina_por_nivel[1] = 20;
-    destino->estamina_maxima = 15;
-    destino->estamina_atual = 15;
+    destino->estamina_por_nivel[0] = 20;
+    destino->estamina_por_nivel[1] = 30;
+    destino->estamina_maxima = 20;
+    destino->estamina_atual = 20;
     destino->habilidades_desbloqueadas = 3;
     definirHabilidade(&destino->habilidades[0], "Ruína dos Covardes", 60, 80, 90, 1, 2,
                       EFEITO_DANO, ATAQUE_MELEE);
-    definirHabilidade(&destino->habilidades[1], "Destruidor de Famílias", 40, 55, 60, 3, 2,
+    definirHabilidade(&destino->habilidades[1], "Destruidor de Famílias", 40, 55, 60, 3, 3,
                       EFEITO_DANO, ATAQUE_LINHA);
     definirHabilidade(&destino->habilidades[2], "Tirano dos Mares", 50, 70, 60, 5, 13,
                       EFEITO_BOMBA, ATAQUE_AREA_3X2);
@@ -271,16 +271,15 @@ bool subirNivelPirata(Combatente *unidade, int niveisGanhos)
         int indiceTabela;
         int estaminaNova;
         int estaminaBonus;
-        if (unidade->nivel >= 6) {
-            break;
-        }
         aumentoVida = (unidade->vida_maxima * 20) / 100;
         if (aumentoVida < 1) {
             aumentoVida = 1;
         }
         nivelNovo = unidade->nivel + 1;
         indiceTabela = nivelNovo - 1;
-        estaminaNova = unidade->estamina_por_nivel[indiceTabela] + bonusColar;
+        estaminaNova = nivelNovo <= 6 ?
+                       unidade->estamina_por_nivel[indiceTabela] + bonusColar :
+                       unidade->estamina_maxima;
         unidade->nivel = nivelNovo;
         unidade->vida_maxima += aumentoVida;
         unidade->vida_atual += aumentoVida;
@@ -337,8 +336,7 @@ bool ganharExperienciaEvoluir(Combatente *unidade, int experiencia)
         return false;
     }
     unidade->experiencia += experiencia;
-    while (unidade->nivel + niveis < 6 &&
-           unidade->experiencia >= (unidade->nivel + niveis) * 100) {
+    while (unidade->experiencia >= (unidade->nivel + niveis) * 100) {
         unidade->experiencia -= (unidade->nivel + niveis) * 100;
         niveis++;
     }
@@ -411,7 +409,7 @@ static int sortearIdRecompensaCombate(unsigned int *semente)
     if (rolagem < 90) {
         return itensEpicos[avancarSemente(semente) % 3U];
     }
-    return 11;
+    return itensEpicos[avancarSemente(semente) % 3U];
 }
 
 // Aplica evolução, moedas, cura e itens sorteados conforme a rota vencida.
@@ -515,28 +513,30 @@ static void aplicarMultiplicadorInimigo(Combatente *inimigo, int fator)
 void escalonarInimigoPorDificuldade(Combatente *inimigo, int nivelDificuldade)
 {
     int rotaIndice;
-    int multRota = contadorFugas > 0 ? 150 : 125;
-    if (inimigo == NULL || nivelDificuldade <= 1) {
+    int multFuga = contadorFugas > 1 ? 175 : 150;
+    if (inimigo == NULL) {
         return;
     }
     for (rotaIndice = 1; rotaIndice < nivelDificuldade; rotaIndice++) {
-        aplicarMultiplicadorInimigo(inimigo, multRota);
+        aplicarMultiplicadorInimigo(inimigo, 125);
+    }
+    if (contadorFugas > 0) {
+        aplicarMultiplicadorInimigo(inimigo, multFuga);
     }
 }
 
 // Aplica multiplicadores de rota, fuga e saque usando matemática 100% inteira.
 void escalonarInimigoPorRota(Combatente *inimigo, TipoNoRota tipoRota, int etapa,
-                             bool houveFuga, bool saqueouLoja)
+                             int fugasNaRun, bool saqueouLoja)
 {
     int rotaIndice;
-    int multRota = houveFuga ? 150 : 125;
     (void)tipoRota;
     if (inimigo == NULL) {
         return;
     }
     if (inimigo->eh_boss) {
-        if (houveFuga) {
-            aplicarMultiplicadorInimigo(inimigo, 150);
+        if (fugasNaRun > 0) {
+            aplicarMultiplicadorInimigo(inimigo, fugasNaRun > 1 ? 175 : 150);
         }
         return;
     }
@@ -545,7 +545,10 @@ void escalonarInimigoPorRota(Combatente *inimigo, TipoNoRota tipoRota, int etapa
         inimigo->estamina_atual = inimigo->estamina_maxima;
     }
     for (rotaIndice = 1; rotaIndice < etapa; rotaIndice++) {
-        aplicarMultiplicadorInimigo(inimigo, multRota);
+        aplicarMultiplicadorInimigo(inimigo, 125);
+    }
+    if (fugasNaRun > 0) {
+        aplicarMultiplicadorInimigo(inimigo, fugasNaRun > 1 ? 175 : 150);
     }
     if (saqueouLoja) {
         aplicarMultiplicadorInimigo(inimigo, 200);

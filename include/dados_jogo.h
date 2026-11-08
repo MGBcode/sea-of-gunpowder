@@ -33,7 +33,7 @@ int aplicarInflacaoLoja(int preco);
 void escalonarInimigoPorDificuldade(Combatente *inimigo, int nivelDificuldade);
 // Aplica os modificadores multiplicativos de uma rota e histórico de run.
 void escalonarInimigoPorRota(Combatente *inimigo, TipoNoRota tipoRota, int etapa,
-                             bool houveFuga, bool saqueouLoja);
+                             int fugasNaRun, bool saqueouLoja);
 // Gera inimigos determinísticos para a rota e retorna quantos foram criados.
 int sortearInimigosRota(TipoNoRota tipoRota, unsigned int semente,
                         int indices[], int capacidade);

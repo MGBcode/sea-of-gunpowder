@@ -18,6 +18,7 @@ typedef enum {
     POPUP_LOJA,
     POPUP_DETALHES_PERSONAGEM,
     POPUP_CONFIRMAR_FUGA,
+    POPUP_RECOMPENSAS,
     POPUP_PAUSE
 } TipoPopupModal;
 
@@ -44,6 +45,7 @@ typedef struct {
     int total_selecionados;
     int ids_sobreviventes_fuga[3];
     int total_sobreviventes_fuga;
+    bool piratas_mortos[5];
     int pirata_posicionando_indice;
     int indice_item_selecionado;
     int total_inimigos;
@@ -52,9 +54,12 @@ typedef struct {
     bool fase_pre_combate_ativa;
     bool saque_em_andamento;
     bool loja_aberta_pendente;
+    bool sair_solicitado;
     int total_itens_loja;
     Item itens_loja[3];
     int estoques_loja[3];
+    Item itens_recompensa[6];
+    int total_itens_recompensa;
     float timer_turno_inimigo;
     float timer_destaque_acao;
     float timer_indicador_dano;

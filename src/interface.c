@@ -59,18 +59,12 @@ bool converterCoordenadaMouseVirtual(float mouseRealX, float mouseRealY,
     if (larguraJanela <= 0 || alturaJanela <= 0 || virtualX == NULL || virtualY == NULL) {
         return false;
     }
+    if (mouseRealX < 0.0f || mouseRealX >= (float)larguraJanela ||
+        mouseRealY < 0.0f || mouseRealY >= (float)alturaJanela) {
+        return false;
+    }
     *virtualX = (int)((mouseRealX * (float)LARGURA_VIRTUAL) / (float)larguraJanela);
     *virtualY = (int)((mouseRealY * (float)ALTURA_VIRTUAL) / (float)alturaJanela);
-    if (*virtualX < 0) {
-        *virtualX = 0;
-    } else if (*virtualX >= LARGURA_VIRTUAL) {
-        *virtualX = LARGURA_VIRTUAL - 1;
-    }
-    if (*virtualY < 0) {
-        *virtualY = 0;
-    } else if (*virtualY >= ALTURA_VIRTUAL) {
-        *virtualY = ALTURA_VIRTUAL - 1;
-    }
     return true;
 }
 
@@ -467,10 +461,10 @@ static void iniciarEncontro(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
             return;
         }
         escalonarInimigoPorRota(&interfaceJogo->inimigos[0], ROTA_CHEFE,
-                                 etapaAtual, contadorFugas > 0, false);
-        interfaceJogo->inimigos[0].linha = celulasDireita[0][0];
-        interfaceJogo->inimigos[0].coluna = celulasDireita[0][1];
-        mapa->celulas[celulasDireita[0][0]][celulasDireita[0][1]] = &interfaceJogo->inimigos[0];
+                                 etapaAtual, contadorFugas, false);
+        interfaceJogo->inimigos[0].linha = 1;
+        interfaceJogo->inimigos[0].coluna = COLUNAS_TABULEIRO - 1;
+        mapa->celulas[1][COLUNAS_TABULEIRO - 1] = &interfaceJogo->inimigos[0];
     } else {
         unsigned int semente = (unsigned int)(*interfaceJogo->rota_atual)->nivel_dificuldade;
         semente += (unsigned int)(etapaAtual * 31);
@@ -487,7 +481,7 @@ static void iniciarEncontro(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
                 return;
             }
             escalonarInimigoPorRota(inimigo, (*interfaceJogo->rota_atual)->tipo,
-                                     etapaAtual, contadorFugas > 0,
+                                     etapaAtual, contadorFugas,
                                      contadorSaques > 0 ||
                                      interfaceJogo->saque_em_andamento ||
                                      (*interfaceJogo->rota_atual)->tipo == ROTA_LOJA);
@@ -515,12 +509,55 @@ static void iniciarEncontro(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
     interfaceJogo->estado = TELA_COMBATE_3X6;
 }
 
+static int quantidadeItemInventario(const ListaItens *inventario, int id)
+{
+    const NoItem *item;
+    int quantidade = 0;
+    if (inventario == NULL) {
+        return 0;
+    }
+    for (item = inventario->inicio; item != NULL; item = item->proximo) {
+        if (item->item.id == id) {
+            quantidade += item->item.quantidade;
+        }
+    }
+    return quantidade;
+}
+
+static void registrarItensRecompensa(InterfaceJogo *interfaceJogo,
+                                     const int quantidadesAntes[TOTAL_ITENS_PREDEFINIDOS])
+{
+    Item catalogo[TOTAL_ITENS_PREDEFINIDOS];
+    int indice;
+    interfaceJogo->total_itens_recompensa = 0;
+    (void)carregarItensIniciais(catalogo, TOTAL_ITENS_PREDEFINIDOS);
+    for (indice = 0; indice < TOTAL_ITENS_PREDEFINIDOS &&
+                      interfaceJogo->total_itens_recompensa < 6; indice++) {
+        int quantidadeNova = quantidadeItemInventario(interfaceJogo->inventario,
+                                                       catalogo[indice].id) -
+                             quantidadesAntes[indice];
+        if (quantidadeNova > 0) {
+            Item *recompensa =
+                &interfaceJogo->itens_recompensa[interfaceJogo->total_itens_recompensa++];
+            *recompensa = catalogo[indice];
+            recompensa->quantidade = quantidadeNova;
+        }
+    }
+}
+
 // Aplica a recompensa da rota ou do saque da loja após vencer o combate.
 static void concluirVitoria(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
                             Combatente piratas[], int totalPiratas)
 {
+    Item catalogo[TOTAL_ITENS_PREDEFINIDOS];
+    int quantidadesAntes[TOTAL_ITENS_PREDEFINIDOS] = { 0 };
     int indice;
     TipoNoRota tipoAtual = (*interfaceJogo->rota_atual)->tipo;
+    (void)carregarItensIniciais(catalogo, TOTAL_ITENS_PREDEFINIDOS);
+    for (indice = 0; indice < TOTAL_ITENS_PREDEFINIDOS; indice++) {
+        quantidadesAntes[indice] =
+            quantidadeItemInventario(interfaceJogo->inventario, catalogo[indice].id);
+    }
     for (indice = 0; indice < totalPiratas; indice++) {
         limparEfeitosPosCombate(&piratas[indice]);
     }
@@ -540,6 +577,9 @@ static void concluirVitoria(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
             return;
         }
     }
+    if (tipoAtual != ROTA_CHEFE) {
+        registrarItensRecompensa(interfaceJogo, quantidadesAntes);
+    }
     interfaceJogo->timer_indicador_dano = 0.0f;
     if (tipoAtual == ROTA_CHEFE) {
         interfaceJogo->estado = TELA_VITORIA;
@@ -547,6 +587,7 @@ static void concluirVitoria(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
         limparMapa(mapa);
         posicionarTripulacao(interfaceJogo, mapa, piratas, totalPiratas);
         interfaceJogo->estado = TELA_MAPA_ROTAS;
+        interfaceJogo->popup_ativo = POPUP_RECOMPENSAS;
     }
 }
 
@@ -572,6 +613,7 @@ static void executarPassoTurnoInimigo(InterfaceJogo *interfaceJogo, Tabuleiro3x6
 {
     Combatente *inimigo = interfaceJogo->ator_atual;
     CandidatoAcao escolha;
+    bool acaoSelecionada;
     if (inimigo == NULL || !inimigo->vivo || inimigo->aliado ||
         inimigo->turno_perdido || inimigo->em_descanso ||
         inimigo->acoes_basicas_restantes <= 0) {
@@ -580,8 +622,13 @@ static void executarPassoTurnoInimigo(InterfaceJogo *interfaceJogo, Tabuleiro3x6
     }
     interfaceJogo->linha_origem_acao = inimigo->linha;
     interfaceJogo->coluna_origem_acao = inimigo->coluna;
-    if (!selecionarAcaoIA(mapa, inimigo, &escolha) ||
-        escolha.tipo_acao == ACAO_IA_DESCANSAR) {
+    acaoSelecionada = selecionarAcaoIA(mapa, inimigo, &escolha);
+    if ((!acaoSelecionada || escolha.tipo_acao == ACAO_IA_DESCANSAR) &&
+        inimigo->eh_boss && inimigo->estamina_atual > 0) {
+        inimigo->acoes_basicas_restantes = 0;
+        (void)snprintf(interfaceJogo->log_combate, sizeof(interfaceJogo->log_combate),
+                       "Barba Negra não descansa enquanto ainda possui estamina.");
+    } else if (!acaoSelecionada || escolha.tipo_acao == ACAO_IA_DESCANSAR) {
         iniciarDescanso(mapa, inimigo);
         inimigo->acoes_basicas_restantes = 0;
         interfaceJogo->linha_destaque_acao = inimigo->linha;
@@ -649,7 +696,9 @@ static void executarPassoTurnoInimigo(InterfaceJogo *interfaceJogo, Tabuleiro3x6
                            inimigo->nome, origLin, origCol,
                            escolha.linha_alvo, escolha.coluna_alvo);
         } else {
-            iniciarDescanso(mapa, inimigo);
+            if (!inimigo->eh_boss || inimigo->estamina_atual <= 0) {
+                iniciarDescanso(mapa, inimigo);
+            }
             inimigo->acoes_basicas_restantes = 0;
             interfaceJogo->linha_destaque_acao = inimigo->linha;
             interfaceJogo->coluna_destaque_acao = inimigo->coluna;
@@ -758,6 +807,9 @@ void processarFugaETrocaTripulacao(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *m
     if (interfaceJogo == NULL || mapa == NULL || piratasDisponiveis == NULL ||
         interfaceJogo->raiz_rotas == NULL || interfaceJogo->rota_atual == NULL ||
         interfaceJogo->nivel_dificuldade == NULL) {
+        return;
+    }
+    if (contadorFugas >= 2) {
         return;
     }
     *interfaceJogo->raiz_rotas =
@@ -927,6 +979,13 @@ void atualizarInterface(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
     interfaceJogo->inventario = inventario;
     interfaceJogo->moedas = moedas;
     interfaceJogo->nivel_dificuldade = nivelDificuldade;
+    for (indice = 0; indice < totalDisponiveis; indice++) {
+        int idPirata = piratasDisponiveis[indice].id;
+        if (idPirata >= 1 && idPirata <= 5) {
+            interfaceJogo->piratas_mortos[idPirata - 1] =
+                !piratasDisponiveis[indice].vivo;
+        }
+    }
     if (interfaceJogo->estado != TELA_MENU_PRINCIPAL && IsKeyPressed(KEY_ESCAPE)) {
         if (interfaceJogo->popup_ativo == POPUP_PAUSE) {
             interfaceJogo->popup_ativo = POPUP_NENHUM;
@@ -983,6 +1042,12 @@ void atualizarInterface(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
     }
     mouse = obterMouseVirtual();
     if (interfaceJogo->popup_ativo != POPUP_NENHUM) {
+        if (interfaceJogo->popup_ativo == POPUP_RECOMPENSAS) {
+            if (retanguloClicado((Rectangle){ 530, 470, 220, 55 }, mouse)) {
+                interfaceJogo->popup_ativo = POPUP_NENHUM;
+            }
+            return;
+        }
         if (interfaceJogo->popup_ativo == POPUP_PAUSE) {
             if (retanguloClicado((Rectangle){ 490, 300, 300, 58 }, mouse)) {
                 interfaceJogo->popup_ativo = POPUP_NENHUM;
@@ -1029,6 +1094,7 @@ void atualizarInterface(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
                 return;
             }
             if (interfaceJogo->estado == TELA_MAPA_ROTAS &&
+                contadorFugas < 2 &&
                 retanguloClicado((Rectangle){ 350, 420, 150, 50 }, mouse)) {
                 processarFugaETrocaTripulacao(interfaceJogo, mapa,
                                               piratasDisponiveis, totalDisponiveis);
@@ -1199,6 +1265,8 @@ void atualizarInterface(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
     if (interfaceJogo->estado == TELA_MENU_PRINCIPAL) {
         if (retanguloClicado((Rectangle){ 470, 350, 340, 70 }, mouse)) {
             interfaceJogo->estado = TELA_SELECAO_TRIPULACAO;
+        } else if (retanguloClicado((Rectangle){ 470, 445, 340, 60 }, mouse)) {
+            interfaceJogo->sair_solicitado = true;
         }
         return;
     }
@@ -1619,8 +1687,8 @@ static const char *descricaoPassivaInimigo(const Combatente *unidade)
     }
     if (unidade->eh_boss) {
         return unidade->fase_boss == 2 ?
-            "Fase 2 Ativa (Fúria do Kraken - <=50% PV): Estamina máxima sobe para 20, invocou 2 Grunts com Espada, planta Minas explosivas (50 de dano) a cada 2 movimentos e seus ataques aplicam Envenenamento (-10% da Vida Máx por 2 turnos)!" :
-            "Fase 1 (Senhor do Convés): Executa 3 turnos completos por rodada (Velocidades 8, 6 e 4) com 15 de Estamina. Ao cair para 50% de Vida ou menos, desperta a Fase 2!";
+            "Fase 2 Ativa (Fúria do Kraken - <=50% PV): Estamina máxima sobe para 30. Fica imune até os 2 Grunts com Espada invocados morrerem; planta Minas explosivas (50 de dano) a cada 2 movimentos e seus ataques aplicam Envenenamento (-10% da Vida Máx por 2 turnos)!" :
+            "Fase 1 (Senhor do Convés): 3000 PV e 20 de Estamina; executa 3 turnos completos por rodada (Velocidades 8, 6 e 4). Ao cair para 50% de Vida ou menos, desperta a Fase 2!";
     }
     if (unidade->tipo_inimigo == INIMIGO_GRUNT_ESPADA) {
         return "Passiva (Lâmina Serrilhada): Ao acertar 3 vezes o ataque Corte no mesmo pirata durante o combate, abre uma hemorragia que aplica Sangramento (-15% da Vida Máxima por turno durante 2 turnos).";
@@ -1664,7 +1732,7 @@ static const char *descricaoHabilidadeDetalhada(const Combatente *unidade, int i
         }
         if (unidade->classe == CLASSE_COZINHEIRO) {
             if (indiceHab == 0) {
-                return "Serve uma refeição fumegante preparada no caldeirão do navio para si mesmo ou para um aliado a até 2 quadrados em linha reta. Cura garantidamente 35% da Vida Máxima total do alvo!";
+                return "Serve uma refeição fumegante preparada no caldeirão do navio para si mesmo ou para um aliado a até 2 quadrados em linha reta. Cura garantidamente 20% da Vida Máxima total do alvo!";
             }
             if (indiceHab == 1) {
                 return "Dispara uma rajada de chumbo grosso com seu bacamarte de cano largo numa linha reta de 2 quadrados (sem empurrar inimigos). Atinge todos na linha (aliados sofrem 50%), causando dano maior a 1 quadrado de distância e dano menor a 2 quadrados.";
@@ -2110,11 +2178,15 @@ static void desenharMochila(const InterfaceJogo *interfaceJogo)
         int posAbaX = 180 + indice * 220;
         int idPirata = interfaceJogo->piratas_selecionados_ids[indice];
         bool abaAtiva = selecionado != NULL && selecionado->id == idPirata;
+        bool morto = idPirata >= 1 && idPirata <= 5 &&
+                     interfaceJogo->piratas_mortos[idPirata - 1];
         DrawRectangle(posAbaX, 112, 205, 36,
                       abaAtiva ? (Color){ 45, 95, 130, 255 } : (Color){ 28, 42, 54, 255 });
         DrawRectangleLines(posAbaX, 112, 205, 36, abaAtiva ? GOLD : GRAY);
-        desenharTexto(nomePirataPorId(idPirata),
-                      posAbaX + 24, 121, 15, abaAtiva ? GOLD : RAYWHITE);
+        desenharTexto(morto ? TextFormat("%s - MORTO", nomePirataPorId(idPirata)) :
+                              nomePirataPorId(idPirata),
+                      posAbaX + 24, 121, 15,
+                      morto ? GRAY : (abaAtiva ? GOLD : RAYWHITE));
     }
     desenharTexto(somenteConsumiveis ?
                   "ITENS NA MOCHILA (Em combate: apenas Consumíveis podem ser usados):" :
@@ -2231,19 +2303,50 @@ static void desenharLoja(const InterfaceJogo *interfaceJogo)
 }
 
 // Desenha o pop-up modal de confirmação de desistência ("Fugir da Aventura").
-static void desenharConfirmacaoFuga(void)
+static void desenharConfirmacaoFuga(const InterfaceJogo *interfaceJogo)
 {
     DrawRectangle(210, 200, 620, 295, (Color){ 12, 19, 27, 252 });
     DrawRectangleLines(210, 200, 620, 295, GOLD);
     desenharTexto("Fugir da Aventura (Retornar à Rota 1)?", 295, 235, 22, GOLD);
-    desenharTexto("Piratas vivos mantêm nível e itens equipados nas builds.", 265, 282, 15, RAYWHITE);
-    desenharTexto("Piratas mortos podem ser reescolhidos no Nv 1 (sem passivos).", 260, 312, 15, SKYBLUE);
-    desenharTexto("Itens na mochila serão perdidos e inimigos terão +50% status!",
-                  260, 342, 15, ORANGE);
-    DrawRectangle(350, 420, 150, 50, (Color){ 140, 50, 40, 255 });
+    desenharTexto(TextFormat("Fugas usadas: %d/2 | Ouro mantido: %d",
+                             contadorFugas,
+                             interfaceJogo->moedas == NULL ? 0 : *interfaceJogo->moedas),
+                  300, 265, 15, GOLD);
+    desenharTexto("Piratas vivos mantêm nível e itens equipados nas builds.", 265, 295, 15, RAYWHITE);
+    desenharTexto("Piratas mortos podem ser reescolhidos no Nv 1 (sem passivos).", 260, 325, 15, SKYBLUE);
+    desenharTexto(contadorFugas == 0 ?
+                  "Itens da mochila serão perdidos; inimigos recebem +50% de status." :
+                  "Itens da mochila serão perdidos; inimigos recebem +75% de status.",
+                  260, 355, 15, ORANGE);
+    DrawRectangle(350, 420, 150, 50, contadorFugas < 2 ?
+                  (Color){ 140, 50, 40, 255 } : (Color){ 65, 70, 75, 255 });
     DrawRectangle(530, 420, 150, 50, (Color){ 60, 75, 87, 255 });
-    desenharTexto("FUGIR", 395, 436, 18, RAYWHITE);
+    desenharTexto(contadorFugas < 2 ? "FUGIR" : "LIMITE 2/2",
+                  contadorFugas < 2 ? 395 : 364, 436, 18,
+                  contadorFugas < 2 ? RAYWHITE : GRAY);
     desenharTexto("CANCELAR", 554, 436, 18, RAYWHITE);
+}
+
+static void desenharRecompensas(const InterfaceJogo *interfaceJogo)
+{
+    int indice;
+    DrawRectangle(320, 175, 640, 390, (Color){ 12, 19, 27, 252 });
+    DrawRectangleLines(320, 175, 640, 390, GOLD);
+    desenharTexto("RECOMPENSAS DO COMBATE", 465, 205, 24, GOLD);
+    if (interfaceJogo->total_itens_recompensa == 0) {
+        desenharTexto("Nenhum item foi obtido neste combate.", 430, 280, 17, LIGHTGRAY);
+    }
+    for (indice = 0; indice < interfaceJogo->total_itens_recompensa; indice++) {
+        const Item *item = &interfaceJogo->itens_recompensa[indice];
+        int posY = 260 + indice * 42;
+        DrawRectangle(385, posY, 510, 34, (Color){ 26, 40, 52, 255 });
+        DrawRectangleLines(385, posY, 510, 34, corRaridadeItem(item->raridade));
+        desenharTexto(TextFormat("%s (x%d)", item->nome, item->quantidade),
+                      405, posY + 8, 15, corRaridadeItem(item->raridade));
+    }
+    DrawRectangle(530, 470, 220, 55, (Color){ 45, 125, 70, 255 });
+    DrawRectangleLines(530, 470, 220, 55, GOLD);
+    desenharTexto("CONTINUAR", 580, 487, 18, RAYWHITE);
 }
 
 // Retorna um nome conciso e legível da unidade para exibição clara na barra de iniciativa.
@@ -2451,7 +2554,10 @@ static void desenharMenu(void)
     desenharTexto("Crônicas de Sangue e Pólvora - RPG Tático Roguelike em Turnos", 295, 225, 20, RAYWHITE);
     DrawRectangle(470, 350, 340, 70, (Color){ 45, 125, 70, 255 });
     desenharTexto("INICIAR AVENTURA", 525, 374, 22, RAYWHITE);
-    desenharTexto("Controle 100% pelo Mouse | ESC abre o menu de Pause.", 420, 470, 16, LIGHTGRAY);
+    DrawRectangle(470, 445, 340, 60, (Color){ 135, 48, 38, 255 });
+    DrawRectangleLines(470, 445, 340, 60, GOLD);
+    desenharTexto("SAIR DO JOGO", 575, 464, 20, RAYWHITE);
+    desenharTexto("Controle 100% pelo Mouse | ESC abre o menu de Pause.", 420, 535, 16, LIGHTGRAY);
     finalizarQuadroVirtual();
 }
 
@@ -2501,7 +2607,7 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
             DrawRectangle(480, 340, 380, 100, (Color){ 145, 42, 38, 255 });
             DrawRectangleLines(480, 340, 380, 100, GOLD);
             desenharTexto("ENFRENTAR BARBA NEGRA", 515, 365, 22, GOLD);
-            desenharTexto("Chefe Final (1500 HP | 2 Fases | 3 Turnos/Rodada)",
+            desenharTexto("Chefe Final (3000 HP | 2 Fases | 3 Turnos/Rodada)",
                           500, 400, 14, RAYWHITE);
         } else {
             DrawRectangle(440, 290, 260, 95, (Color){ 50, 88, 125, 255 });
@@ -2527,7 +2633,8 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
                       interfaceJogo->popup_ativo == POPUP_DETALHES_PERSONAGEM ?
                       (Color){ 65, 115, 135, 255 } : (Color){ 48, 65, 78, 255 });
         desenharTexto("MOCHILA / BUILDS", 104, 648, 16, RAYWHITE);
-        desenharTexto("FUGIR AVENTURA", 320, 648, 16, RAYWHITE);
+        desenharTexto(contadorFugas < 2 ? "FUGIR AVENTURA" : "FUGAS 2/2",
+                      320, 648, 16, contadorFugas < 2 ? RAYWHITE : GRAY);
         desenharTexto("DETALHES PIRATA", 524, 648, 16, RAYWHITE);
         if (mapa != NULL) {
             int linha;
@@ -2566,6 +2673,28 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
                            !interfaceJogo->ator_atual->aliado) ? ORANGE : GOLD);
             if (interfaceJogo->log_combate[0] != '\0') {
                 desenharTexto(interfaceJogo->log_combate, 80, 88, 16, RAYWHITE);
+            }
+            if (mapa->boss_fase_2_ativa) {
+                int gruntsVivos = 0;
+                int linha;
+                int coluna;
+                for (linha = 0; linha < LINHAS_TABULEIRO; linha++) {
+                    for (coluna = 0; coluna < COLUNAS_TABULEIRO; coluna++) {
+                        Combatente *unidade = mapa->celulas[linha][coluna];
+                        if (unidade != NULL && unidade->vivo &&
+                            unidade->tipo_inimigo == INIMIGO_GRUNT_ESPADA &&
+                            (unidade->id == 110 || unidade->id == 111)) {
+                            gruntsVivos++;
+                        }
+                    }
+                }
+                if (gruntsVivos > 0) {
+                    DrawRectangle(220, 105, 840, 30, (Color){ 145, 42, 38, 245 });
+                    DrawRectangleLines(220, 105, 840, 30, GOLD);
+                    desenharTexto(TextFormat("BARBA NEGRA IMUNE: derrote os Grunts com Espada! Restantes: %d",
+                                             gruntsVivos),
+                                  245, 112, 14, RAYWHITE);
+                }
             }
         }
         desenharTabuleiro(interfaceJogo, mapa, alcanceAtivo);
@@ -2657,7 +2786,9 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
         } else if (interfaceJogo->popup_ativo == POPUP_DETALHES_PERSONAGEM) {
             desenharDetalhes(interfaceJogo, interfaceJogo->entidade_selecionada);
         } else if (interfaceJogo->popup_ativo == POPUP_CONFIRMAR_FUGA) {
-            desenharConfirmacaoFuga();
+            desenharConfirmacaoFuga(interfaceJogo);
+        } else if (interfaceJogo->popup_ativo == POPUP_RECOMPENSAS) {
+            desenharRecompensas(interfaceJogo);
         } else if (interfaceJogo->popup_ativo == POPUP_PAUSE) {
             desenharMenuPause();
         }

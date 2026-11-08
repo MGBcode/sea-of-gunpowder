@@ -208,9 +208,6 @@ bool avancarProximoTurno(EntradaIniciativa fila[], int total, int *indiceAtual,
             continue;
         }
         if (!unidade->eh_boss || entrada->indice_turno_boss == 0) {
-            if (unidade->eh_boss) {
-                unidade->estamina_atual = unidade->estamina_maxima;
-            }
             processarStatusInicioTurno(mapa, unidade);
         }
         if (unidade->vivo && !unidade->turno_perdido) {
@@ -247,6 +244,8 @@ static void invocarGruntProximo(Tabuleiro3x6 *mapa, Combatente *grunt,
         grunt->linha = melhorLinha;
         grunt->coluna = melhorColuna;
         mapa->celulas[melhorLinha][melhorColuna] = grunt;
+    } else {
+        grunt->vivo = false;
     }
 }
 
@@ -274,6 +273,10 @@ void subtrairVida(Tabuleiro3x6 *mapa, Combatente *alvo, int quantidade)
     if (alvo == NULL || !alvo->vivo || quantidade <= 0) {
         return;
     }
+    if (alvo->eh_boss && alvo->fase_boss == 2 &&
+        (bossGrunts[0].vivo || bossGrunts[1].vivo)) {
+        return;
+    }
     alvo->vida_atual -= quantidade;
     if (alvo->vida_atual <= 0) {
         verificarMorteCombatente(mapa, alvo);
@@ -286,11 +289,8 @@ void subtrairVida(Tabuleiro3x6 *mapa, Combatente *alvo, int quantidade)
     mapa->boss_fase_2_ativa = true;
     mapa->turnos_boss_fase_2 = 0;
     alvo->fase_boss = 2;
-    alvo->estamina_maxima = 20;
-    alvo->estamina_atual += 5;
-    if (alvo->estamina_atual > alvo->estamina_maxima) {
-        alvo->estamina_atual = alvo->estamina_maxima;
-    }
+    alvo->estamina_maxima = 30;
+    alvo->estamina_atual = alvo->estamina_maxima;
     for (indiceGrunt = 0; indiceGrunt < 2; indiceGrunt++) {
         invocarGruntProximo(mapa, &bossGrunts[indiceGrunt],
                             indiceGrunt == 0 ? 0 : 2,
@@ -1254,7 +1254,9 @@ void processarStatusInicioTurno(Tabuleiro3x6 *mapa, Combatente *unidade)
     unidade->turno_perdido = false;
     unidade->usou_consumivel_gratis_turno = false;
     if (unidade->em_descanso) {
-        if (unidade->atacado_no_descanso) {
+        if (unidade->eh_boss) {
+            unidade->estamina_atual = unidade->estamina_maxima;
+        } else if (unidade->atacado_no_descanso) {
             unidade->estamina_atual += unidade->estamina_maxima / 2;
         } else {
             unidade->estamina_atual = unidade->estamina_maxima;

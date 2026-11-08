@@ -376,8 +376,9 @@ bool selecionarAcaoIA(Tabuleiro3x6 *mapa, Combatente *inimigo, CandidatoAcao *es
             }
         }
     }
-    if (inimigo->estamina_atual <= 1 ||
-        (total == 0 && inimigo->estamina_atual < inimigo->estamina_maxima)) {
+    if (inimigo->eh_boss ? inimigo->estamina_atual <= 0 :
+        (inimigo->estamina_atual <= 1 ||
+         (total == 0 && inimigo->estamina_atual < inimigo->estamina_maxima))) {
         int proporcao = inimigo->estamina_maxima > 0
                             ? (inimigo->estamina_atual * 100) / inimigo->estamina_maxima
                             : 0;
