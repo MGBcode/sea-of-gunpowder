@@ -108,9 +108,9 @@ static int estimarDano(const Combatente *inimigo, const Combatente *alvo,
     int danoMin = habilidade->dano_min;
     int danoMax = habilidade->dano_max;
     int dano;
-    if (inimigo->tipo_inimigo == INIMIGO_MARUJO_GORDO && indiceHab == 0 && distancia > 1) {
-        danoMin = habilidade->dano_min / 2;
-        danoMax = (habilidade->dano_max * 40) / 70;
+    if (inimigo->tipo_inimigo == INIMIGO_MARUJO_GORDO && indiceHab == 0) {
+        danoMin = distancia == 1 ? habilidade->dano_max : habilidade->dano_min;
+        danoMax = danoMin;
     }
     dano = inimigo->dano_base + (danoMin + danoMax) / 2 - alvo->defesa;
     if (inimigo->eh_boss && inimigo->fase_boss == 2) {

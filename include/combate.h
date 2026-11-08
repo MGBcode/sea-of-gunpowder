@@ -28,6 +28,8 @@ void executarAtaqueOuHabilidade(Tabuleiro3x6 *mapa, Combatente *atacante, int in
 void iniciarDescanso(Tabuleiro3x6 *mapa, Combatente *unidade);
 // Aplica efeitos de status no início do turno.
 void processarStatusInicioTurno(Tabuleiro3x6 *mapa, Combatente *unidade);
+// Calcula o total de ações por turno considerando passiva do Bucaneiro Nv 4 e Rum de Poseidon.
+int calcularAcoesPorTurno(const Combatente *unidade);
 // Remove todos os buffs, debuffs e acúmulos temporários ao encerrar um combate.
 void limparEfeitosPosCombate(Combatente *unidade);
 

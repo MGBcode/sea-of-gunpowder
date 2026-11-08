@@ -29,7 +29,8 @@ static int distanciaEntre(int linhaA, int colunaA, int linhaB, int colunaB)
 // Calcula a velocidade com os modificadores ativos de Motivação, Veneno e Timoneiro.
 static int velocidadeEfetiva(const Combatente *unidade, int base)
 {
-    if (unidade->turnos_motivacao > 0 || unidade->motivado_capitao) {
+    if (unidade->turnos_motivacao > 0 || unidade->motivado_capitao ||
+        unidade == motivadoAtivoNesteTurno) {
         base += 2;
     }
     if (unidade->turnos_veneno > 0) {
@@ -496,8 +497,9 @@ static int calcularPrecisaoFinal(const Combatente *atacante, const Habilidade *h
     if (atacante->turnos_desmoralizado > 0 || atacante == desmoralizadoAtivoNesteTurno) {
         precisao = precisao - (precisao * 15) / 100;
     }
-    if (atacante->motivado_capitao || atacante == motivadoAtivoNesteTurno) {
-        precisao = precisao + (precisao * 20) / 100;
+    if (atacante->turnos_motivacao > 0 || atacante->motivado_capitao ||
+        atacante == motivadoAtivoNesteTurno) {
+        precisao += 40;
     }
     if (precisao < 0) {
         precisao = 0;
@@ -537,13 +539,14 @@ static int calcularDanoFinal(Tabuleiro3x6 *mapa, Combatente *atacante,
         danoMin = distancia == 1 ? habilidade->dano_max : habilidade->dano_min;
         danoMax = danoMin;
     } else if (!atacante->aliado && atacante->tipo_inimigo == INIMIGO_MARUJO_GORDO &&
-               indiceHabilidade == 0 && distancia > 1) {
-        danoMin = habilidade->dano_min / 2;
-        danoMax = (habilidade->dano_max * 40) / 70;
+               indiceHabilidade == 0) {
+        danoMin = distancia == 1 ? habilidade->dano_max : habilidade->dano_min;
+        danoMax = danoMin;
     }
     precisaoFinal = calcularPrecisaoFinal(atacante, habilidade, indiceHabilidade, distancia);
     dano = (GetRandomValue(1, 100) <= precisaoFinal) ? danoMax : danoMin;
     obterBonusPassivos(atacante, &reducao, &melee, &ranged, &precisao);
+    (void)alvo;
     (void)reducao;
     (void)precisao;
     if (ataqueRanged) {
@@ -555,16 +558,6 @@ static int calcularDanoFinal(Tabuleiro3x6 *mapa, Combatente *atacante,
         somaPctBuffs += atacante->bonus_tonico_percentual;
     } else if (atacante == tonicoAtivoNesteTurno && bonusTonicoAtivoNesteTurno > 0) {
         somaPctBuffs += bonusTonicoAtivoNesteTurno;
-    }
-    if (atacante->aliado && atacante->classe == CLASSE_BUCANEIRO &&
-        (atacante->passiva_aprimorada || atacante->nivel >= 4) && alvo != NULL) {
-        int prodColuna = (atacante->coluna - alvo->coluna) * alvo->direcao_coluna;
-        int prodLinha = (atacante->linha - alvo->linha) * alvo->direcao_linha;
-        if (atacante->coluna > alvo->coluna ||
-            (alvo->direcao_coluna != 0 && prodColuna < 0) ||
-            (alvo->direcao_linha != 0 && prodLinha < 0)) {
-            somaPctBuffs += 40;
-        }
     }
     if (atacante->aliado && atacante->classe == CLASSE_TIMONEIRO &&
         atacante->vida_atual * 100 < atacante->vida_maxima * 60) {
@@ -742,13 +735,12 @@ static void aplicarEfeito(Tabuleiro3x6 *mapa, Combatente *atacante, Combatente *
     }
     if (habilidade->efeito == EFEITO_MOTIVACAO) {
         if (alvo->aliado == atacante->aliado) {
-            if (alvo->turnos_motivacao <= 0) {
+            if (!alvo->motivado_capitao) {
                 alvo->estamina_maxima += 1;
                 alvo->estamina_atual += 1;
+                alvo->motivado_capitao = true;
             }
-            alvo->motivado_capitao = true;
-            alvo->bonus_estamina_proximo_turno += 2;
-            alvo->turnos_motivacao = 2;
+            alvo->turnos_motivacao = 3;
         } else {
             alvo->turnos_desmoralizado = 2;
         }
@@ -759,24 +751,22 @@ static void aplicarEfeito(Tabuleiro3x6 *mapa, Combatente *atacante, Combatente *
         if (atacante->aliado && atacante->classe == CLASSE_BUCANEIRO) {
             alvo->golpes_corte_bucaneiro_recebidos++;
             if (alvo->golpes_corte_bucaneiro_recebidos >= 2) {
-                alvo->turnos_sangramento = 3;
+                alvo->turnos_sangramento = 2;
                 alvo->golpes_corte_bucaneiro_recebidos = 0;
             }
         } else if (!atacante->aliado &&
                    atacante->tipo_inimigo == INIMIGO_GRUNT_ESPADA) {
             alvo->golpes_corte_grunt_recebidos++;
             if (alvo->golpes_corte_grunt_recebidos >= 3) {
-                alvo->turnos_sangramento = 3;
+                alvo->turnos_sangramento = 2;
                 alvo->golpes_corte_grunt_recebidos = 0;
             }
         } else {
-            alvo->turnos_sangramento = 3;
+            alvo->turnos_sangramento = 2;
         }
     } else if (habilidade->efeito == EFEITO_VENENO) {
         if (alvo->aliado != atacante->aliado) {
-            if (alvo->turnos_veneno <= 0) {
-                alvo->turnos_veneno = 2;
-            }
+            alvo->turnos_veneno = 2;
         } else {
             alvo->turnos_cura_hot = 2;
             alvo->valor_cura_hot = (alvo->vida_maxima * 10) / 100;
@@ -788,9 +778,13 @@ static void aplicarEfeito(Tabuleiro3x6 *mapa, Combatente *atacante, Combatente *
         alvo->turnos_desnorteado = habilidade->duracao_efeito > 0 ?
                                     habilidade->duracao_efeito : 2;
     } else if (habilidade->efeito == EFEITO_CURA_CONTINUA) {
+        int pctCura = habilidade->dano_max > 0 ? habilidade->dano_max : 10;
         alvo->turnos_cura_hot = habilidade->duracao_efeito > 0 ?
                                 habilidade->duracao_efeito : 3;
-        alvo->valor_cura_hot = habilidade->dano_min;
+        alvo->valor_cura_hot = (alvo->vida_maxima * pctCura) / 100;
+        if (alvo->valor_cura_hot < 1) {
+            alvo->valor_cura_hot = 1;
+        }
     } else if (habilidade->efeito == EFEITO_CURA) {
         int cura = (alvo->vida_maxima * habilidade->dano_max) / 100;
         if (cura < 1) {
@@ -1105,10 +1099,6 @@ void executarAtaqueOuHabilidade(Tabuleiro3x6 *mapa, Combatente *atacante, int in
         }
         if (temKnockback) {
             for (indiceAlvo = totalAlvosLista - 1; indiceAlvo >= 0; indiceAlvo--) {
-                if (atacante->aliado && atacante->classe == CLASSE_COZINHEIRO &&
-                    indiceHab == 1 && distAlvosLista[indiceAlvo] > 1) {
-                    continue;
-                }
                 aplicarKnockbackUnidade(mapa, alvosAtingidosLista[indiceAlvo],
                                         dirAxialLinha, dirAxialColuna);
             }
@@ -1218,11 +1208,41 @@ void iniciarDescanso(Tabuleiro3x6 *mapa, Combatente *unidade)
     (void)mapa;
 }
 
+// Calcula o total de ações por turno considerando passiva do Bucaneiro Nv 4 e Rum de Poseidon.
+int calcularAcoesPorTurno(const Combatente *unidade)
+{
+    int acoes = 2;
+    const NoItem *item;
+    if (unidade == NULL) {
+        return 0;
+    }
+    if (unidade->aliado && unidade->classe == CLASSE_BUCANEIRO &&
+        (unidade->passiva_aprimorada || unidade->nivel >= 4)) {
+        acoes += 1;
+    }
+    for (item = unidade->build_passivos.inicio; item != NULL; item = item->proximo) {
+        if (item->item.bonus_acoes_basicas > 0) {
+            acoes += item->item.bonus_acoes_basicas *
+                     (item->item.quantidade > 0 ? item->item.quantidade : 1);
+        }
+    }
+    return acoes;
+}
+
 // Aplica efeitos persistentes (DoT/HoT) e recarrega recursos no início do turno.
 void processarStatusInicioTurno(Tabuleiro3x6 *mapa, Combatente *unidade)
 {
     if (unidade == NULL || !unidade->vivo) {
         return;
+    }
+    if (unidade->motivado_capitao && unidade->turnos_motivacao <= 0) {
+        unidade->motivado_capitao = false;
+        if (unidade->estamina_maxima > 1) {
+            unidade->estamina_maxima -= 1;
+            if (unidade->estamina_atual > unidade->estamina_maxima) {
+                unidade->estamina_atual = unidade->estamina_maxima;
+            }
+        }
     }
     venenoAtivoNesteTurno = unidade->turnos_veneno > 0 ? unidade : NULL;
     desmoralizadoAtivoNesteTurno = unidade->turnos_desmoralizado > 0 ? unidade : NULL;
@@ -1253,11 +1273,19 @@ void processarStatusInicioTurno(Tabuleiro3x6 *mapa, Combatente *unidade)
         unidade->bonus_estamina_proximo_turno = 0;
     }
     if (unidade->turnos_sangramento > 0) {
-        subtrairVida(mapa, unidade, DANO_SANGRAMENTO_TURNO);
+        int danoSangramento = (unidade->vida_maxima * PCT_SANGRAMENTO_TURNO) / 100;
+        if (danoSangramento < 1) {
+            danoSangramento = 1;
+        }
+        subtrairVida(mapa, unidade, danoSangramento);
         unidade->turnos_sangramento--;
     }
     if (unidade->vivo && unidade->turnos_veneno > 0) {
-        subtrairVida(mapa, unidade, DANO_VENENO_TURNO);
+        int danoVeneno = (unidade->vida_maxima * PCT_VENENO_TURNO) / 100;
+        if (danoVeneno < 1) {
+            danoVeneno = 1;
+        }
+        subtrairVida(mapa, unidade, danoVeneno);
         unidade->turnos_veneno--;
     }
     if (unidade->vivo && unidade->turnos_cura_hot > 0) {
@@ -1269,15 +1297,6 @@ void processarStatusInicioTurno(Tabuleiro3x6 *mapa, Combatente *unidade)
     }
     if (unidade->turnos_motivacao > 0) {
         unidade->turnos_motivacao--;
-        if (unidade->turnos_motivacao == 0) {
-            unidade->motivado_capitao = false;
-            if (unidade->estamina_maxima > 1) {
-                unidade->estamina_maxima -= 1;
-                if (unidade->estamina_atual > unidade->estamina_maxima) {
-                    unidade->estamina_atual = unidade->estamina_maxima;
-                }
-            }
-        }
     }
     if (unidade->turnos_desmoralizado > 0) {
         unidade->turnos_desmoralizado--;
@@ -1295,6 +1314,9 @@ void processarStatusInicioTurno(Tabuleiro3x6 *mapa, Combatente *unidade)
         unidade->turnos_atordoado--;
         unidade->turno_perdido = true;
     }
+    if (unidade->vivo && !unidade->turno_perdido) {
+        unidade->acoes_basicas_restantes = calcularAcoesPorTurno(unidade);
+    }
 }
 
 // Remove todos os buffs, debuffs e acúmulos temporários ao encerrar um combate.
@@ -1303,7 +1325,8 @@ void limparEfeitosPosCombate(Combatente *unidade)
     if (unidade == NULL) {
         return;
     }
-    if (unidade->turnos_motivacao > 0 && unidade->estamina_maxima > 1) {
+    if ((unidade->motivado_capitao || unidade->turnos_motivacao > 0) &&
+        unidade->estamina_maxima > 1) {
         unidade->estamina_maxima -= 1;
     }
     unidade->em_descanso = false;

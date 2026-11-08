@@ -136,9 +136,19 @@ static bool testarClassesEMecanicasCombate(void)
     }
     bucaneiro.estamina_atual = bucaneiro.estamina_maxima;
     executarAtaqueOuHabilidade(&mapa, &bucaneiro, 0, 1, 2);
-    if (inimigoA.turnos_sangramento != 3) {
-        fprintf(stderr, "Falha sanitaria: 2o Ataque 1 do Bucaneiro no mesmo inimigo deve causar Sangramento.\n");
+    if (inimigoA.turnos_sangramento != 2) {
+        fprintf(stderr, "Falha sanitaria: 2o Ataque 1 do Bucaneiro no mesmo inimigo deve causar Sangramento por 2 turnos.\n");
         return false;
+    }
+    {
+        int vidaAntesSangr = inimigoA.vida_atual;
+        int danoSangrEsperado = (inimigoA.vida_maxima * 15) / 100;
+        processarStatusInicioTurno(&mapa, &inimigoA);
+        if (inimigoA.vida_atual != vidaAntesSangr - danoSangrEsperado ||
+            inimigoA.turnos_sangramento != 1) {
+            fprintf(stderr, "Falha sanitaria: Sangramento deve causar -15%% da vida maxima por turno durante 2 turnos.\n");
+            return false;
+        }
     }
 
     (void)memset(&mapa, 0, sizeof(mapa));
@@ -225,8 +235,9 @@ static bool testarClassesEMecanicasCombate(void)
     mapa.celulas[1][2] = &inimigoA;
     mapa.celulas[1][3] = &inimigoB;
     executarAtaqueOuHabilidade(&mapa, &cozinheiro, 1, 1, 3);
-    if (inimigoA.vida_atual != 200 || inimigoB.vida_atual != 240) {
-        fprintf(stderr, "Falha sanitaria: Bacamarte deve atingir toda a linha de 2 quadrados (100 perto e 60 longe).\n");
+    if (inimigoA.vida_atual != 200 || inimigoB.vida_atual != 240 ||
+        inimigoA.coluna != 2 || inimigoB.coluna != 3) {
+        fprintf(stderr, "Falha sanitaria: Bacamarte deve atingir a linha de 2 quadrados (100 perto e 60 longe) sem empurrar.\n");
         return false;
     }
     (void)subirNivelPirata(&cozinheiro, 5);
@@ -315,6 +326,45 @@ static bool testarClassesEMecanicasCombate(void)
         fprintf(stderr, "Falha sanitaria: Desmoralizado (+1 custo de estamina no 2o turno).\n");
         return false;
     }
+    {
+        Combatente aliadoMotivado;
+        EntradaIniciativa filaMot[8];
+        int totalMot;
+        int idxMot;
+        int velMotivado = 0;
+        (void)criarPirataInicial(CLASSE_TIMONEIRO, &aliadoMotivado);
+        aliadoMotivado.linha = 0;
+        aliadoMotivado.coluna = 0;
+        mapa.celulas[0][0] = &aliadoMotivado;
+        capitao.estamina_atual = capitao.estamina_maxima;
+        executarAtaqueOuHabilidade(&mapa, &capitao, 1, 0, 0);
+        totalMot = montarFilaTurnos(&mapa, filaMot);
+        for (idxMot = 0; idxMot < totalMot; idxMot++) {
+            if (filaMot[idxMot].ator == &aliadoMotivado) {
+                velMotivado = filaMot[idxMot].velocidade_efetiva;
+            }
+        }
+        if (aliadoMotivado.turnos_motivacao != 3 ||
+            !aliadoMotivado.motivado_capitao ||
+            aliadoMotivado.estamina_maxima != 6 ||
+            velMotivado != 7) {
+            fprintf(stderr, "Falha sanitaria: Discursar em aliado (+40%% precisao, +2 velocidade, +1 estamina max por 3 turnos).\n");
+            return false;
+        }
+        processarStatusInicioTurno(&mapa, &aliadoMotivado);
+        processarStatusInicioTurno(&mapa, &aliadoMotivado);
+        processarStatusInicioTurno(&mapa, &aliadoMotivado);
+        if (!aliadoMotivado.motivado_capitao || aliadoMotivado.estamina_maxima != 6) {
+            fprintf(stderr, "Falha sanitaria: Motivacao deve permanecer ativa durante o 3o turno completo.\n");
+            return false;
+        }
+        processarStatusInicioTurno(&mapa, &aliadoMotivado);
+        if (aliadoMotivado.motivado_capitao || aliadoMotivado.estamina_maxima != 5) {
+            fprintf(stderr, "Falha sanitaria: Motivacao deve expirar apos os 3 turnos.\n");
+            return false;
+        }
+        mapa.celulas[0][0] = NULL;
+    }
 
     (void)memset(&mapa, 0, sizeof(mapa));
     (void)criarPirataInicial(CLASSE_GAVEA, &gavea);
@@ -355,6 +405,16 @@ static bool testarClassesEMecanicasCombate(void)
         fprintf(stderr, "Falha sanitaria: Zarabatana em inimigo (Veneno 2t).\n");
         return false;
     }
+    {
+        int vidaAntesVeneno = inimigoA.vida_atual;
+        int danoVenenoEsperado = (inimigoA.vida_maxima * 10) / 100;
+        processarStatusInicioTurno(&mapa, &inimigoA);
+        if (inimigoA.vida_atual != vidaAntesVeneno - danoVenenoEsperado ||
+            inimigoA.turnos_veneno != 1) {
+            fprintf(stderr, "Falha sanitaria: Envenenamento deve causar -10%% da vida maxima por turno durante 2 turnos.\n");
+            return false;
+        }
+    }
     gavea.estamina_atual = gavea.estamina_maxima;
     executarAtaqueOuHabilidade(&mapa, &gavea, 1, 1, 0);
     if (gavea.turnos_cura_hot != 2 ||
@@ -389,9 +449,112 @@ static bool testarClassesEMecanicasCombate(void)
     inimigoA.estamina_atual = 5;
     bucaneiro.vida_atual = 100;
     executarAtaqueOuHabilidade(&mapa, &inimigoA, 0, 1, 1);
-    if (bucaneiro.turnos_sangramento != 3) {
-        fprintf(stderr, "Falha sanitaria: 3 cortes do Grunt devem aplicar Sangramento.\n");
+    if (bucaneiro.turnos_sangramento != 2) {
+        fprintf(stderr, "Falha sanitaria: 3 cortes do Grunt devem aplicar Sangramento por 2 turnos.\n");
         return false;
+    }
+
+    {
+        Combatente atiradorMagrelo;
+        Combatente marujoGordo;
+        Combatente aliadoInimigo;
+        (void)criarInimigoInicial(INIMIGO_ATIRADOR_MAGRELO, &atiradorMagrelo);
+        if (atiradorMagrelo.habilidades[0].alcance != 3) {
+            fprintf(stderr, "Falha sanitaria: Atirador Magrelo deve ter 3 quadrados de alcance.\n");
+            return false;
+        }
+        (void)memset(&mapa, 0, sizeof(mapa));
+        (void)criarInimigoInicial(INIMIGO_MARUJO_GORDO, &marujoGordo);
+        (void)criarInimigoInicial(INIMIGO_GRUNT_ESPADA, &aliadoInimigo);
+        (void)criarPirataInicial(CLASSE_TIMONEIRO, &timoneiro);
+        marujoGordo.linha = 1;
+        marujoGordo.coluna = 3;
+        aliadoInimigo.vida_maxima = 300;
+        aliadoInimigo.vida_atual = 300;
+        aliadoInimigo.linha = 1;
+        aliadoInimigo.coluna = 2;
+        timoneiro.vida_maxima = 300;
+        timoneiro.vida_atual = 300;
+        timoneiro.linha = 1;
+        timoneiro.coluna = 1;
+        mapa.celulas[1][3] = &marujoGordo;
+        mapa.celulas[1][2] = &aliadoInimigo;
+        mapa.celulas[1][1] = &timoneiro;
+        executarAtaqueOuHabilidade(&mapa, &marujoGordo, 0, 1, 1);
+        if (aliadoInimigo.vida_atual != 265 || timoneiro.vida_atual != 250) {
+            fprintf(stderr, "Falha sanitaria: Escopeta do Marujo Gordo deve funcionar igual ao Bacamarte (70 perto, 50 longe, 50%% em aliado).\n");
+            return false;
+        }
+        marujoGordo.estamina_atual = marujoGordo.estamina_maxima;
+        aliadoInimigo.vida_maxima = 200;
+        aliadoInimigo.vida_atual = 100;
+        executarAtaqueOuHabilidade(&mapa, &marujoGordo, 1, 1, 2);
+        if (aliadoInimigo.turnos_cura_hot != 3 ||
+            aliadoInimigo.valor_cura_hot != 20) {
+            fprintf(stderr, "Falha sanitaria: Bandagens do Marujo Gordo devem curar 10%% da vida total por 3 turnos.\n");
+            return false;
+        }
+    }
+
+    {
+        Combatente tripulacaoRota[1];
+        Combatente bucTesteAcoes;
+        ListaItens invRota = { NULL, 0 };
+        int moedasSalvas = moedasTripulacao;
+        int idxRum;
+        (void)criarPirataInicial(CLASSE_BUCANEIRO, &tripulacaoRota[0]);
+        moedasTripulacao = 0;
+        if (!aplicarRecompensaRota(ROTA_CAMINHO_1, tripulacaoRota, 1, &invRota, 1) ||
+            moedasTripulacao != 700) {
+            fprintf(stderr, "Falha sanitaria: Caminho 1 deve dar 700 ouros.\n");
+            moedasTripulacao = moedasSalvas;
+            liberarEstruturasJogo(NULL, &invRota, NULL);
+            return false;
+        }
+        moedasTripulacao = 0;
+        if (!aplicarRecompensaRota(ROTA_CAMINHO_2, tripulacaoRota, 1, &invRota, 1) ||
+            moedasTripulacao != 300) {
+            fprintf(stderr, "Falha sanitaria: Caminho 2 deve dar 300 ouros.\n");
+            moedasTripulacao = moedasSalvas;
+            liberarEstruturasJogo(NULL, &invRota, NULL);
+            return false;
+        }
+        moedasTripulacao = moedasSalvas;
+        liberarEstruturasJogo(NULL, &invRota, NULL);
+
+        (void)criarPirataInicial(CLASSE_BUCANEIRO, &bucTesteAcoes);
+        if (calcularAcoesPorTurno(&bucTesteAcoes) != 2) {
+            fprintf(stderr, "Falha sanitaria: Bucaneiro Nv 1 deve ter 2 acoes por turno.\n");
+            return false;
+        }
+        (void)subirNivelPirata(&bucTesteAcoes, 3);
+        if (!bucTesteAcoes.passiva_aprimorada || calcularAcoesPorTurno(&bucTesteAcoes) != 3) {
+            fprintf(stderr, "Falha sanitaria: Passiva Nv 4 do Bucaneiro deve conceder +1 acao por turno (total 3).\n");
+            return false;
+        }
+        for (idxRum = 0; idxRum < 5; idxRum++) {
+            NoItem *noRum = malloc(sizeof(*noRum));
+            if (noRum == NULL) {
+                liberarListaItensCombatente(&bucTesteAcoes.build_passivos);
+                return false;
+            }
+            noRum->item = catalogo[10];
+            noRum->item.quantidade = 1;
+            noRum->proximo = bucTesteAcoes.build_passivos.inicio;
+            bucTesteAcoes.build_passivos.inicio = noRum;
+            bucTesteAcoes.build_passivos.tamanho++;
+            if (calcularAcoesPorTurno(&bucTesteAcoes) != 3 + idxRum + 1) {
+                fprintf(stderr, "Falha sanitaria: acumulo de Rum de Poseidon com passiva Nv 4 do Bucaneiro.\n");
+                liberarListaItensCombatente(&bucTesteAcoes.build_passivos);
+                return false;
+            }
+        }
+        if (calcularAcoesPorTurno(&bucTesteAcoes) != 8) {
+            fprintf(stderr, "Falha sanitaria: Bucaneiro Nv 4 com 5 Runs de Poseidon deve ter 8 acoes por turno.\n");
+            liberarListaItensCombatente(&bucTesteAcoes.build_passivos);
+            return false;
+        }
+        liberarListaItensCombatente(&bucTesteAcoes.build_passivos);
     }
 
     {

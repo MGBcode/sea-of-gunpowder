@@ -73,7 +73,7 @@ static void definirCombatente(Combatente *unidade, int id, const char *nome, int
 bool criarPirataInicial(int indice, Combatente *destino)
 {
     static const char *nomes[TOTAL_PIRATAS_PREDEFINIDOS] = {
-        "Bucaneiro", "Timoneiro", "Cozinheiro", "Capitao", "Gavea"
+        "Bucaneiro", "Timoneiro", "Cozinheiro", "Capitão", "Gávea"
     };
     static const int vidas[TOTAL_PIRATAS_PREDEFINIDOS] = { 150, 250, 200, 170, 120 };
     static const int velocidades[TOTAL_PIRATAS_PREDEFINIDOS] = { 9, 5, 5, 7, 6 };
@@ -101,9 +101,9 @@ bool criarPirataInicial(int indice, Combatente *destino)
                           EFEITO_SANGRAMENTO, ATAQUE_MELEE);
         definirHabilidade(&destino->habilidades[1], "Bolsa de Areia", 0, 0, 90, 1, 4,
                           EFEITO_ESTUNAR, ATAQUE_AREA_1X3);
-        definirHabilidade(&destino->habilidades[2], "Avanco Impetuoso", 120, 150, 90, 2, 6,
+        definirHabilidade(&destino->habilidades[2], "Avanço Impetuoso", 120, 150, 90, 2, 6,
                           EFEITO_DANO, ATAQUE_DASH_CARDEAL);
-        destino->habilidades[0].duracao_efeito = 3;
+        destino->habilidades[0].duracao_efeito = 2;
         destino->habilidades[1].duracao_efeito = 1;
         destino->habilidades[1].fogo_amigo = true;
         destino->habilidades[2].fogo_amigo = true;
@@ -113,7 +113,7 @@ bool criarPirataInicial(int indice, Combatente *destino)
                           EFEITO_DANO, ATAQUE_MELEE);
         definirHabilidade(&destino->habilidades[1], "Esmagar", 90, 120, 60, 1, 3,
                           EFEITO_ESTUNAR, ATAQUE_MELEE);
-        definirHabilidade(&destino->habilidades[2], "Giro do Timao", 50, 85, 60, 1, 4,
+        definirHabilidade(&destino->habilidades[2], "Giro do Timão", 50, 85, 60, 1, 4,
                           EFEITO_DESNORTEAR, ATAQUE_AREA_1X3);
         destino->habilidades[1].duracao_efeito = 1;
         destino->habilidades[2].duracao_efeito = 2;
@@ -122,7 +122,7 @@ bool criarPirataInicial(int indice, Combatente *destino)
         definirHabilidade(&destino->habilidades[0], "Comida da Boa", 0, 35, 100, 2, 2,
                           EFEITO_CURA, ATAQUE_RANGED);
         definirHabilidade(&destino->habilidades[1], "Bacamarte", 60, 100, 100, 2, 3,
-                          EFEITO_KNOCKBACK, ATAQUE_LINHA);
+                          EFEITO_DANO, ATAQUE_LINHA);
         definirHabilidade(&destino->habilidades[2], "Hora do Rango", 0, 70, 100, 1, 6,
                           EFEITO_CURA, ATAQUE_AREA_2X3);
         destino->habilidades[1].fogo_amigo = true;
@@ -133,12 +133,12 @@ bool criarPirataInicial(int indice, Combatente *destino)
                           EFEITO_DANO, ATAQUE_HIBRIDO_SAQUEAR);
         definirHabilidade(&destino->habilidades[1], "Discursar", 0, 0, 70, 2, 3,
                           EFEITO_MOTIVACAO, ATAQUE_RANGED);
-        definirHabilidade(&destino->habilidades[2], "Enxurrada de Canhoes", 100, 130, 70, 5, 6,
+        definirHabilidade(&destino->habilidades[2], "Enxurrada de Canhões", 100, 130, 70, 5, 6,
                           EFEITO_BOMBA, ATAQUE_AREA_3X2);
-        destino->habilidades[1].duracao_efeito = 2;
+        destino->habilidades[1].duracao_efeito = 3;
         destino->habilidades[2].fogo_amigo = true;
     } else {
-        definirHabilidade(&destino->habilidades[0], "Disparo de Longa Distancia", 60, 110,
+        definirHabilidade(&destino->habilidades[0], "Disparo de Longa Distância", 60, 110,
                           40, 3, 2, EFEITO_DANO, ATAQUE_LINHA);
         definirHabilidade(&destino->habilidades[1], "Zarabatana", 0, 0, 40, 2, 1,
                           EFEITO_VENENO, ATAQUE_RANGED);
@@ -178,7 +178,7 @@ bool criarInimigoInicial(int indice, Combatente *destino)
     if (indice == INIMIGO_GRUNT_ESPADA) {
         definirHabilidade(&destino->habilidades[0], "Corte", 35, 50, 80, 1, 2,
                           EFEITO_SANGRAMENTO, ATAQUE_MELEE);
-        destino->habilidades[0].duracao_efeito = 3;
+        destino->habilidades[0].duracao_efeito = 2;
     } else if (indice == INIMIGO_GRUNT_PISTOLA) {
         definirHabilidade(&destino->habilidades[0], "Tiro", 20, 30, 60, 2, 1,
                           EFEITO_DANO, ATAQUE_LINHA);
@@ -186,13 +186,15 @@ bool criarInimigoInicial(int indice, Combatente *destino)
                           EFEITO_BOMBA, ATAQUE_CRUZ);
         destino->habilidades[1].fogo_amigo = true;
     } else if (indice == INIMIGO_ATIRADOR_MAGRELO) {
-        definirHabilidade(&destino->habilidades[0], "Disparo Pesado", 25, 60, 35, 4, 2,
+        definirHabilidade(&destino->habilidades[0], "Disparo Pesado", 25, 60, 35, 3, 2,
                           EFEITO_DANO, ATAQUE_LINHA);
     } else {
-        definirHabilidade(&destino->habilidades[0], "Escopeta", 50, 70, 80, 2, 3,
+        definirHabilidade(&destino->habilidades[0], "Escopeta", 50, 70, 100, 2, 3,
                           EFEITO_DANO, ATAQUE_LINHA);
-        definirHabilidade(&destino->habilidades[1], "Bandagens", 15, 15, 80, 1, 1,
+        definirHabilidade(&destino->habilidades[1], "Bandagens", 10, 10, 100, 1, 1,
                           EFEITO_CURA_CONTINUA, ATAQUE_RANGED);
+        destino->habilidades[0].fogo_amigo = true;
+        destino->habilidades[0].perfurante = true;
         destino->habilidades[1].duracao_efeito = 3;
     }
     return true;
@@ -215,9 +217,9 @@ bool criarChefeFinal(Combatente *destino)
     destino->estamina_maxima = 15;
     destino->estamina_atual = 15;
     destino->habilidades_desbloqueadas = 3;
-    definirHabilidade(&destino->habilidades[0], "Ruina dos Covardes", 60, 80, 90, 1, 2,
+    definirHabilidade(&destino->habilidades[0], "Ruína dos Covardes", 60, 80, 90, 1, 2,
                       EFEITO_DANO, ATAQUE_MELEE);
-    definirHabilidade(&destino->habilidades[1], "Destruidor de Familias", 40, 55, 60, 3, 2,
+    definirHabilidade(&destino->habilidades[1], "Destruidor de Famílias", 40, 55, 60, 3, 2,
                       EFEITO_DANO, ATAQUE_LINHA);
     definirHabilidade(&destino->habilidades[2], "Tirano dos Mares", 50, 70, 60, 5, 13,
                       EFEITO_BOMBA, ATAQUE_AREA_3X2);
@@ -230,7 +232,7 @@ int carregarItensIniciais(Item itens[], int capacidade)
 {
     static const Item catalogo[TOTAL_ITENS_PREDEFINIDOS] = {
         { 1, "Bandagem", ITEM_CONSUMIVEL, RARIDADE_COMUM, 1, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, CONSUMIVEL_CURAR_VIDA, 40 },
-        { 2, "Tonico Enfurecedor", ITEM_CONSUMIVEL, RARIDADE_COMUM, 1, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, CONSUMIVEL_TONICO, 2 },
+        { 2, "Tônico Enfurecedor", ITEM_CONSUMIVEL, RARIDADE_COMUM, 1, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, CONSUMIVEL_TONICO, 2 },
         { 3, "Travesseiro", ITEM_CONSUMIVEL, RARIDADE_COMUM, 1, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, CONSUMIVEL_RESTAURAR_ESTAMINA, 100 },
         { 4, "Livro de Origem", ITEM_CONSUMIVEL, RARIDADE_EPICO, 1, 500, 0, 0, 0, 0, 0, 0, 0, 0, 0, CONSUMIVEL_SEM_EFEITO, 2 },
         { 5, "Colete de Couro", ITEM_PASSIVO, RARIDADE_RARO, 1, 250, 0, 0, 0, 0, 0, 15, 0, 0, 0, CONSUMIVEL_SEM_EFEITO, 0 },
@@ -313,6 +315,11 @@ bool subirNivelPirata(Combatente *unidade, int niveisGanhos)
             unidade->habilidades_desbloqueadas = 2;
         }
         if (unidade->nivel >= 4) {
+            if (!unidade->passiva_aprimorada && unidade->aliado &&
+                unidade->classe == CLASSE_BUCANEIRO &&
+                unidade->acoes_basicas_restantes > 0) {
+                unidade->acoes_basicas_restantes += 1;
+            }
             unidade->passiva_aprimorada = true;
         }
         if (unidade->nivel >= 6) {
@@ -423,12 +430,12 @@ bool aplicarRecompensaRota(TipoNoRota tipoRota, Combatente tripulacao[],
                                         contadorFugas * 13 + xpBase + 1);
     if (tipoRota == ROTA_CAMINHO_1) {
         niveis = 2;
-        moedasTripulacao += 300;
+        moedasTripulacao += 700;
         cura = 15;
         quantidadeItens = 1;
     } else if (tipoRota == ROTA_CAMINHO_2) {
         niveis = 1;
-        moedasTripulacao += 700;
+        moedasTripulacao += 300;
         cura = 50;
         quantidadeItens = 2;
     } else if (tipoRota == ROTA_LOJA) {
@@ -494,7 +501,8 @@ static void aplicarMultiplicadorInimigo(Combatente *inimigo, int fator)
     inimigo->vida_atual = (inimigo->vida_atual * fator) / 100;
     inimigo->dano_base = (inimigo->dano_base * fator) / 100;
     for (indice = 0; indice < MAX_HABILIDADES; indice++) {
-        if (inimigo->habilidades[indice].efeito != EFEITO_CURA_CONTINUA) {
+        if (inimigo->habilidades[indice].efeito != EFEITO_CURA &&
+            inimigo->habilidades[indice].efeito != EFEITO_CURA_CONTINUA) {
             inimigo->habilidades[indice].dano_min =
                 (inimigo->habilidades[indice].dano_min * fator) / 100;
             inimigo->habilidades[indice].dano_max =

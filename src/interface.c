@@ -11,11 +11,45 @@
 
 #define LARGURA_VIRTUAL 1280
 #define ALTURA_VIRTUAL 720
+#define LARGURA_RENDER_1080P 1920
+#define ALTURA_RENDER_1080P 1080
+#define ESCALA_1080P(v) (((float)(v)) * 1.5f)
 
 static Font fonteJogo;
 static bool fonteCarregada = false;
 static RenderTexture2D canvasVirtual;
 static bool canvasCarregado = false;
+
+static void desenharRetangulo1080p(int posX, int posY, int largura, int altura, Color cor)
+{
+    DrawRectangleRec((Rectangle){ ESCALA_1080P(posX), ESCALA_1080P(posY),
+                                  ESCALA_1080P(largura), ESCALA_1080P(altura) }, cor);
+}
+
+static void desenharBorda1080p(int posX, int posY, int largura, int altura, Color cor)
+{
+    DrawRectangleLinesEx((Rectangle){ ESCALA_1080P(posX), ESCALA_1080P(posY),
+                                      ESCALA_1080P(largura), ESCALA_1080P(altura) },
+                         1.5f, cor);
+}
+
+static void desenharBordaEx1080p(Rectangle rec, float espessura, Color cor)
+{
+    DrawRectangleLinesEx((Rectangle){ rec.x * 1.5f, rec.y * 1.5f,
+                                      rec.width * 1.5f, rec.height * 1.5f },
+                         espessura * 1.5f, cor);
+}
+
+static void desenharCirculo1080p(int centroX, int centroY, float raio, Color cor)
+{
+    DrawCircleV((Vector2){ ESCALA_1080P(centroX), ESCALA_1080P(centroY) },
+                raio * 1.5f, cor);
+}
+
+#define DrawRectangle desenharRetangulo1080p
+#define DrawRectangleLines desenharBorda1080p
+#define DrawRectangleLinesEx desenharBordaEx1080p
+#define DrawCircle desenharCirculo1080p
 
 // Converte coordenadas reais da janela/tela cheia para a resolução virtual 1280x720.
 bool converterCoordenadaMouseVirtual(float mouseRealX, float mouseRealY,
@@ -87,28 +121,31 @@ static void finalizarQuadroVirtual(void)
     }
 }
 
-// Renderiza texto nítido com filtro bilinear usando a fonte TrueType carregada.
+// Renderiza texto nítido em 1080p com filtro bilinear usando a fonte TrueType carregada.
 static void desenharTexto(const char *texto, int posX, int posY, int tamanho, Color cor)
 {
     if (texto == NULL) {
         return;
     }
     if (fonteCarregada && fonteJogo.texture.id != 0) {
-        DrawTextEx(fonteJogo, texto, (Vector2){ (float)posX, (float)posY },
-                   (float)(tamanho + 2), 1.0f, cor);
+        DrawTextEx(fonteJogo, texto,
+                   (Vector2){ ESCALA_1080P(posX), ESCALA_1080P(posY) },
+                   (float)(tamanho + 2) * 1.5f, 1.5f, cor);
     } else {
-        DrawText(texto, posX, posY, tamanho, cor);
+        DrawText(texto, (int)ESCALA_1080P(posX), (int)ESCALA_1080P(posY),
+                 (int)((float)tamanho * 1.5f), cor);
     }
 }
 
-// Mede a largura em pixels de uma string na fonte atual para quebra automática de linha.
+// Mede a largura lógica de uma string na fonte 1080p atual para quebra automática de linha.
 static int medirLarguraTexto(const char *texto, int tamanho)
 {
     if (texto == NULL || texto[0] == '\0') {
         return 0;
     }
     if (fonteCarregada && fonteJogo.texture.id != 0) {
-        return (int)MeasureTextEx(fonteJogo, texto, (float)(tamanho + 2), 1.0f).x;
+        return (int)(MeasureTextEx(fonteJogo, texto,
+                                   (float)(tamanho + 2) * 1.5f, 1.5f).x / 1.5f);
     }
     return MeasureText(texto, tamanho);
 }
@@ -196,9 +233,9 @@ static const char *nomeRaridadeItem(RaridadeItem raridade)
         return "Raro";
     }
     if (raridade == RARIDADE_EPICO) {
-        return "Epico";
+        return "Épico";
     }
-    return "Lendario";
+    return "Lendário";
 }
 
 // Retorna verdadeiro quando o retângulo recebe um clique esquerdo do mouse.
@@ -389,7 +426,7 @@ static void limparConsumiveisZerados(ListaItens *inventario)
     }
 }
 
-// Cria inimigos ou o chefe e abre a Fase Pré-Batalha na tela 3x6.
+// Cria inimigos ou o chefe em posições variadas na metade direita (colunas 3 a 5).
 static void iniciarEncontro(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
                             Combatente piratas[], int totalPiratas)
 {
@@ -397,25 +434,43 @@ static void iniciarEncontro(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
     int linha;
     int coluna;
     int indices[4];
+    int celulasDireita[9][2];
+    int totalCelulasDireita = 0;
     int etapaAtual;
     if (interfaceJogo->rota_atual == NULL || *interfaceJogo->rota_atual == NULL) {
         return;
     }
     limparMapa(mapa);
     posicionarTripulacao(interfaceJogo, mapa, piratas, totalPiratas);
+    for (linha = 0; linha < LINHAS_TABULEIRO; linha++) {
+        for (coluna = 3; coluna < COLUNAS_TABULEIRO; coluna++) {
+            celulasDireita[totalCelulasDireita][0] = linha;
+            celulasDireita[totalCelulasDireita][1] = coluna;
+            totalCelulasDireita++;
+        }
+    }
+    for (indice = totalCelulasDireita - 1; indice > 0; indice--) {
+        int sorteio = GetRandomValue(0, indice);
+        int tempLin = celulasDireita[indice][0];
+        int tempCol = celulasDireita[indice][1];
+        celulasDireita[indice][0] = celulasDireita[sorteio][0];
+        celulasDireita[indice][1] = celulasDireita[sorteio][1];
+        celulasDireita[sorteio][0] = tempLin;
+        celulasDireita[sorteio][1] = tempCol;
+    }
     etapaAtual = (*interfaceJogo->rota_atual)->etapa;
     if ((*interfaceJogo->rota_atual)->tipo == ROTA_CHEFE) {
         interfaceJogo->total_inimigos = 1;
         if (!criarChefeFinal(&interfaceJogo->inimigos[0])) {
-            TraceLog(LOG_ERROR, "Nao foi possivel criar Barba Negra.");
+            TraceLog(LOG_ERROR, "Não foi possível criar Barba Negra.");
             interfaceJogo->estado = TELA_FIM_DE_JOGO;
             return;
         }
         escalonarInimigoPorRota(&interfaceJogo->inimigos[0], ROTA_CHEFE,
                                  etapaAtual, contadorFugas > 0, false);
-        interfaceJogo->inimigos[0].linha = 1;
-        interfaceJogo->inimigos[0].coluna = 5;
-        mapa->celulas[1][5] = &interfaceJogo->inimigos[0];
+        interfaceJogo->inimigos[0].linha = celulasDireita[0][0];
+        interfaceJogo->inimigos[0].coluna = celulasDireita[0][1];
+        mapa->celulas[celulasDireita[0][0]][celulasDireita[0][1]] = &interfaceJogo->inimigos[0];
     } else {
         unsigned int semente = (unsigned int)(*interfaceJogo->rota_atual)->nivel_dificuldade;
         semente += (unsigned int)(etapaAtual * 31);
@@ -425,9 +480,8 @@ static void iniciarEncontro(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
                                     semente, indices, 4);
         for (indice = 0; indice < interfaceJogo->total_inimigos; indice++) {
             Combatente *inimigo = &interfaceJogo->inimigos[indice];
-            int posicao = indice;
             if (!criarInimigoInicial(indices[indice], inimigo)) {
-                TraceLog(LOG_ERROR, "Nao foi possivel criar inimigo de indice %d.",
+                TraceLog(LOG_ERROR, "Não foi possível criar inimigo de índice %d.",
                          indices[indice]);
                 interfaceJogo->estado = TELA_FIM_DE_JOGO;
                 return;
@@ -437,11 +491,8 @@ static void iniciarEncontro(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
                                      contadorSaques > 0 ||
                                      interfaceJogo->saque_em_andamento ||
                                      (*interfaceJogo->rota_atual)->tipo == ROTA_LOJA);
-            linha = posicao % LINHAS_TABULEIRO;
-            coluna = posicao < LINHAS_TABULEIRO ? 5 : 4;
-            if (mapa->celulas[linha][coluna] != NULL) {
-                coluna--;
-            }
+            linha = celulasDireita[indice][0];
+            coluna = celulasDireita[indice][1];
             inimigo->linha = linha;
             inimigo->coluna = coluna;
             mapa->celulas[linha][coluna] = inimigo;
@@ -459,7 +510,7 @@ static void iniciarEncontro(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
     interfaceJogo->linha_origem_acao = -1;
     interfaceJogo->coluna_origem_acao = -1;
     (void)snprintf(interfaceJogo->log_combate, sizeof(interfaceJogo->log_combate),
-                   "Posicione sua tripulacao nas Colunas 0 e 1 antes da batalha.");
+                   "Posicione sua tripulação nas Colunas 0 e 1 antes da batalha.");
     interfaceJogo->fase_pre_combate_ativa = true;
     interfaceJogo->estado = TELA_COMBATE_3X6;
 }
@@ -537,11 +588,11 @@ static void executarPassoTurnoInimigo(InterfaceJogo *interfaceJogo, Tabuleiro3x6
         interfaceJogo->coluna_destaque_acao = inimigo->coluna;
         interfaceJogo->timer_destaque_acao = 1.0f;
         (void)snprintf(interfaceJogo->log_combate, sizeof(interfaceJogo->log_combate),
-                       "ACAO INIMIGA: %s entrou em Descanso em (%d,%d).",
+                       "AÇÃO INIMIGA: %s entrou em Descanso em (%d,%d).",
                        inimigo->nome, inimigo->linha, inimigo->coluna);
     } else if (escolha.tipo_acao == ACAO_IA_HABILIDADE) {
         Combatente *alvo = mapa->celulas[escolha.linha_alvo][escolha.coluna_alvo];
-        char nomeAlvo[48] = "area";
+        char nomeAlvo[48] = "área";
         int danoTotal;
         int curaTotal;
         if (alvo != NULL) {
@@ -561,7 +612,7 @@ static void executarPassoTurnoInimigo(InterfaceJogo *interfaceJogo, Tabuleiro3x6
         }
         if (danoTotal > 0) {
             (void)snprintf(interfaceJogo->log_combate, sizeof(interfaceJogo->log_combate),
-                           "ACAO INIMIGA: %s usou %s em %s (-%d PV)!",
+                           "AÇÃO INIMIGA: %s usou %s em %s (-%d PV)!",
                            inimigo->nome,
                            inimigo->habilidades[escolha.indice_habilidade].nome,
                            nomeAlvo, danoTotal);
@@ -569,13 +620,13 @@ static void executarPassoTurnoInimigo(InterfaceJogo *interfaceJogo, Tabuleiro3x6
                    inimigo->habilidades[escolha.indice_habilidade].efeito ==
                    EFEITO_CURA_CONTINUA) {
             (void)snprintf(interfaceJogo->log_combate, sizeof(interfaceJogo->log_combate),
-                           "ACAO INIMIGA: %s usou %s em %s (+15 PV/turno)!",
+                           "AÇÃO INIMIGA: %s usou %s em %s (+10%% PV Máx/turno por 3t)!",
                            inimigo->nome,
                            inimigo->habilidades[escolha.indice_habilidade].nome,
                            nomeAlvo);
         } else {
             (void)snprintf(interfaceJogo->log_combate, sizeof(interfaceJogo->log_combate),
-                           "ACAO INIMIGA: %s usou %s em (%d,%d)!",
+                           "AÇÃO INIMIGA: %s usou %s em (%d,%d)!",
                            inimigo->nome,
                            inimigo->habilidades[escolha.indice_habilidade].nome,
                            escolha.linha_alvo, escolha.coluna_alvo);
@@ -594,7 +645,7 @@ static void executarPassoTurnoInimigo(InterfaceJogo *interfaceJogo, Tabuleiro3x6
                 interfaceJogo->timer_indicador_dano = 1.8f;
             }
             (void)snprintf(interfaceJogo->log_combate, sizeof(interfaceJogo->log_combate),
-                           "ACAO INIMIGA: %s moveu de (%d,%d) para (%d,%d).",
+                           "AÇÃO INIMIGA: %s moveu de (%d,%d) para (%d,%d).",
                            inimigo->nome, origLin, origCol,
                            escolha.linha_alvo, escolha.coluna_alvo);
         } else {
@@ -604,7 +655,7 @@ static void executarPassoTurnoInimigo(InterfaceJogo *interfaceJogo, Tabuleiro3x6
             interfaceJogo->coluna_destaque_acao = inimigo->coluna;
             interfaceJogo->timer_destaque_acao = 1.0f;
             (void)snprintf(interfaceJogo->log_combate, sizeof(interfaceJogo->log_combate),
-                           "ACAO INIMIGA: %s encerrou o turno em (%d,%d).",
+                           "AÇÃO INIMIGA: %s encerrou o turno em (%d,%d).",
                            inimigo->nome, inimigo->linha, inimigo->coluna);
         }
     }
@@ -648,20 +699,14 @@ static void avancarIniciativa(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
         interfaceJogo->ator_atual =
             interfaceJogo->fila_iniciativa[interfaceJogo->indice_iniciativa].ator;
         if (interfaceJogo->ator_atual->aliado) {
-            NoItem *item;
-            interfaceJogo->ator_atual->acoes_basicas_restantes = 2;
-            for (item = interfaceJogo->ator_atual->build_passivos.inicio;
-                 item != NULL; item = item->proximo) {
-                if (item->item.bonus_acoes_basicas > 0) {
-                    interfaceJogo->ator_atual->acoes_basicas_restantes +=
-                        item->item.bonus_acoes_basicas;
-                }
-            }
+            interfaceJogo->ator_atual->acoes_basicas_restantes =
+                calcularAcoesPorTurno(interfaceJogo->ator_atual);
             interfaceJogo->entidade_selecionada = interfaceJogo->ator_atual;
             interfaceJogo->timer_turno_inimigo = 0.0f;
             return;
         }
-        interfaceJogo->ator_atual->acoes_basicas_restantes = 2;
+        interfaceJogo->ator_atual->acoes_basicas_restantes =
+            calcularAcoesPorTurno(interfaceJogo->ator_atual);
         interfaceJogo->entidade_selecionada = interfaceJogo->ator_atual;
         interfaceJogo->linha_origem_acao = interfaceJogo->ator_atual->linha;
         interfaceJogo->coluna_origem_acao = interfaceJogo->ator_atual->coluna;
@@ -670,12 +715,12 @@ static void avancarIniciativa(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
         interfaceJogo->timer_destaque_acao = 1.0f;
         interfaceJogo->timer_turno_inimigo = 1.0f;
         (void)snprintf(interfaceJogo->log_combate, sizeof(interfaceJogo->log_combate),
-                       "VEZ DO INIMIGO: %s preparando acao...",
+                       "VEZ DO INIMIGO: %s preparando ação...",
                        interfaceJogo->ator_atual->nome);
         return;
     }
     if (interfaceJogo->estado == TELA_COMBATE_3X6) {
-        TraceLog(LOG_WARNING, "A fila de iniciativa excedeu o limite de seguranca.");
+        TraceLog(LOG_WARNING, "A fila de iniciativa excedeu o limite de segurança.");
         interfaceJogo->estado = TELA_FIM_DE_JOGO;
     }
 }
@@ -807,7 +852,7 @@ static void reiniciarPartidaCompleta(InterfaceJogo *interfaceJogo, Tabuleiro3x6 
     interfaceJogo->estado = TELA_SELECAO_TRIPULACAO;
 }
 
-// Inicializa a janela redimensionável, o framebuffer virtual 1280x720 e a fonte TrueType.
+// Inicializa a janela em 1920x1080 (1080p), o framebuffer 1080p e a fonte TrueType de alta nitidez.
 void inicializarInterface(InterfaceJogo *interfaceJogo)
 {
     static const char *caminhosFontes[3] = {
@@ -835,12 +880,13 @@ void inicializarInterface(InterfaceJogo *interfaceJogo)
     interfaceJogo->margem_superior = 130;
     interfaceJogo->pirata_posicionando_indice = -1;
     interfaceJogo->indice_iniciativa = -1;
-    SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    InitWindow(LARGURA_VIRTUAL, ALTURA_VIRTUAL, "Cronicas de Sangue e Polvora");
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT);
+    InitWindow(LARGURA_RENDER_1080P, ALTURA_RENDER_1080P,
+               "Sea Of Gunpowder - Crônicas de Sangue e Pólvora");
     SetExitKey(KEY_NULL);
     SetWindowMinSize(960, 540);
     SetTargetFPS(60);
-    canvasVirtual = LoadRenderTexture(LARGURA_VIRTUAL, ALTURA_VIRTUAL);
+    canvasVirtual = LoadRenderTexture(LARGURA_RENDER_1080P, ALTURA_RENDER_1080P);
     if (canvasVirtual.id != 0) {
         SetTextureFilter(canvasVirtual.texture, TEXTURE_FILTER_BILINEAR);
         canvasCarregado = true;
@@ -851,7 +897,7 @@ void inicializarInterface(InterfaceJogo *interfaceJogo)
     fonteCarregada = false;
     for (indice = 0; indice < 3; indice++) {
         if (FileExists(caminhosFontes[indice])) {
-            fonteJogo = LoadFontEx(caminhosFontes[indice], 32, codepoints, 224);
+            fonteJogo = LoadFontEx(caminhosFontes[indice], 56, codepoints, 224);
             if (fonteJogo.texture.id != 0) {
                 SetTextureFilter(fonteJogo.texture, TEXTURE_FILTER_BILINEAR);
                 fonteCarregada = true;
@@ -908,8 +954,8 @@ void atualizarInterface(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
             interfaceJogo->scroll_detalhes -= (int)(rodaMouse * 28.0f);
             if (interfaceJogo->scroll_detalhes < 0) {
                 interfaceJogo->scroll_detalhes = 0;
-            } else if (interfaceJogo->scroll_detalhes > 320) {
-                interfaceJogo->scroll_detalhes = 320;
+            } else if (interfaceJogo->scroll_detalhes > 420) {
+                interfaceJogo->scroll_detalhes = 420;
             }
         } else if (interfaceJogo->popup_ativo == POPUP_MOCHILA_BUILDS) {
             interfaceJogo->scroll_mochila -= (int)(rodaMouse * 28.0f);
@@ -1434,7 +1480,7 @@ void atualizarInterface(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
 static const char *nomePirataPorId(int idPirata)
 {
     static const char *nomes[5] = {
-        "Bucaneiro", "Timoneiro", "Cozinheiro", "Capitao", "Gavea"
+        "Bucaneiro", "Timoneiro", "Cozinheiro", "Capitão", "Gávea"
     };
     if (idPirata >= 1 && idPirata <= 5) {
         return nomes[idPirata - 1];
@@ -1455,8 +1501,9 @@ static void desenharIndicadoresStatusUnidade(const Combatente *unidade, int xBas
     if (unidade == NULL || !unidade->vivo) {
         return;
     }
-    if (unidade->turnos_motivacao > 0 && total < 8) {
-        textos[total] = TextFormat("+MOT %dt", unidade->turnos_motivacao);
+    if ((unidade->turnos_motivacao > 0 || unidade->motivado_capitao) && total < 8) {
+        int turnosMot = unidade->turnos_motivacao > 0 ? unidade->turnos_motivacao : 1;
+        textos[total] = TextFormat("+MOT %dt", turnosMot);
         cores[total++] = (Color){ 45, 175, 95, 255 };
     }
     if (unidade->turnos_tonico > 0 && total < 8) {
@@ -1515,31 +1562,31 @@ static const char *descricaoResumoPersonagem(const Combatente *unidade)
     if (unidade->aliado) {
         switch (unidade->classe) {
         case CLASSE_BUCANEIRO:
-            return "Duelista implacavel das abordagens piratas. Com passos ageis pelo conves, anda ate 2 casas por movimento, cega fileiras inteiras com areia e retalha rivais de perto para drenar sua vitalidade.";
+            return "Duelista implacável das abordagens piratas. Com passos ágeis pelo convés, anda até 2 casas por movimento, cega fileiras inteiras com areia e retalha rivais de perto para drenar sua vitalidade.";
         case CLASSE_TIMONEIRO:
-            return "Colosso do leme e muralha viva da embarcacao. Suporta pesados bombardeios na linha de frente, esmaga adversarios a queima-roupa para atordoa-los e gira o timao de carvalho para varrer quem se aproximar.";
+            return "Colosso do leme e muralha viva da embarcação. Suporta pesados bombardeios na linha de frente, esmaga adversários à queima-roupa para atordoá-los e gira o timão de carvalho para varrer quem se aproximar.";
         case CLASSE_COZINHEIRO:
-            return "Mestre cuca do porao e guardiao dos mantimentos. Suas refeicoes restauram a tripulacao com cura garantida (sem depender de precisao), enquanto seu bacamarte carregado de chumbo varre uma linha de 2 quadrados.";
+            return "Mestre-cuca do porão e guardião dos mantimentos. Suas refeições restauram a tripulação com cura garantida (sem depender de precisão), enquanto seu bacamarte carregado de chumbo varre uma linha de 2 quadrados causando mais dano de perto.";
         case CLASSE_CAPITAO:
-            return "Comandante supremo da nau pirata. Alterna golpes de sabre e tiros de garrucha em combate hibrido, inspira os marujos com discursos de abordagem e ordena baterias inteiras de canhoes sobre o conves.";
+            return "Comandante supremo da nau pirata. Alterna golpes de sabre e tiros de garrucha em combate híbrido, inspira os marujos com discursos de abordagem (+40% precisão, +2 velocidade e +1 estamina máx por 3 turnos) e ordena baterias de canhões.";
         case CLASSE_GAVEA:
-            return "Vigia de elite postado no cesto da gavea. Especialista em rifle de pederneira e zarabatana tatica, elimina alvos alinhados a distancia e torna seus disparos ainda mais certeiros e letais de perto.";
+            return "Vigia de elite postado no cesto da gávea. Especialista em rifle de pederneira e zarabatana tática, elimina alvos alinhados à distância e torna seus disparos ainda mais certeiros e letais de perto.";
         default:
-            return "Pirata veterano da tripulacao.";
+            return "Pirata veterano da tripulação.";
         }
     }
     if (unidade->eh_boss) {
-        return "O lendario Terror dos Sete Mares! Comanda o conves com 3 turnos completos por rodada, alternando golpes de sabre, tiros de pistola e bombardeios navais devastadores.";
+        return "O lendário Terror dos Sete Mares! Comanda o convés com 3 turnos completos por rodada, alternando golpes de sabre, tiros de pistola e bombardeios navais devastadores.";
     }
     switch (unidade->tipo_inimigo) {
     case INIMIGO_GRUNT_ESPADA:
-        return "Marujo corsario de linha de frente armado com cutelo serrilhado. Avanca sem hesitar para cercar piratas feridos e abrir cortes profundos que causam Sangramento ao atingir 3 golpes no mesmo alvo.";
+        return "Marujo corsário de linha de frente armado com cutelo serrilhado. Avança sem hesitar para cercar piratas feridos e abrir cortes profundos que causam Sangramento (-15% da Vida Máxima por 2 turnos) ao atingir 3 golpes no mesmo alvo.";
     case INIMIGO_GRUNT_PISTOLA:
-        return "Atirador de conves armado com pistola pederneira de alcance de 2 quadrados e granadas de polvora negra capazes de explodir formacoes em cruz.";
+        return "Atirador de convés armado com pistola pederneira de alcance de 2 quadrados e granadas de pólvora negra capazes de explodir formações em cruz.";
     case INIMIGO_ATIRADOR_MAGRELO:
-        return "Franco-atirador esguio postado na retaguarda. Recua pelo conves para manter distancia segura e disparar seu mosquete pesado a ate 4 quadrados em linha reta.";
+        return "Franco-atirador esguio postado na retaguarda. Recua pelo convés para manter distância segura e disparar seu mosquete pesado a até 3 quadrados em linha reta.";
     default:
-        return "Brutamontes encouracado do navio rival. Dispara sua escopeta a ate 2 quadrados (causando dano total de perto) e enfaixa aliados feridos adjacentes para regenerar sua vida.";
+        return "Brutamontes encouraçado do navio rival. Dispara sua escopeta numa linha de 2 quadrados (causando mais dano de perto, igual ao Bacamarte) e aplica bandagens que curam 10% da Vida Máxima por 3 turnos.";
     }
 }
 
@@ -1547,16 +1594,16 @@ static const char *descricaoResumoPersonagem(const Combatente *unidade)
 static const char *descricaoPassiva(ClassePirata classe, bool aprimorada)
 {
     static const char *passivas[5][2] = {
-        { "Passiva Nv1 (Passos de Abordagem): Suas pernas acostumadas ao balanco do mar permitem deslocar-se ate 2 quadrados ortogonais com uma unica acao de Mover (custo: 1 Estamina).",
-          "Passiva Nv4 (Golpe Traicoeiro): Ao atacar um inimigo pelas costas ou flanco traseiro, explora a guarda aberta do rival para infligir +40% de dano total." },
-        { "Passiva Nv1 (Furia do Naufrago): Quando sua Vida cai abaixo de 60%, a furia da batalha aumenta todo o dano causado pelos seus ataques em +25%.",
+        { "Passiva Nv1 (Passos de Abordagem): Suas pernas acostumadas ao balanço do mar permitem deslocar-se até 2 quadrados ortogonais com uma única ação de Mover (custo: 1 Estamina).",
+          "Passiva Nv4 (Frenesi de Abordagem): Seu domínio de combate concede +1 ação básica extra em todos os seus turnos (passa a ter 3 ações por turno, acumulando com Rum de Poseidon!)." },
+        { "Passiva Nv1 (Fúria do Náufrago): Quando sua Vida cai abaixo de 60%, a fúria da batalha aumenta todo o dano causado pelos seus ataques em +25%.",
           "Passiva Nv4 (Escudo de Carvalho): Protege os companheiros ao redor; aliados posicionados nas 4 casas adjacentes em cruz recebem -40% de dano em qualquer ataque sofrido." },
-        { "Passiva Nv1 (Racao de Reserva): Uma vez por turno, pode utilizar 1 item consumivel da mochila instantaneamente sem gastar nenhuma de suas acoes basicas.",
-          "Passiva Nv4 (Tempero Secreto): Domina a alquimia culinaria do navio, aumentando em +20% a eficacia de qualquer item consumivel utilizado em seu turno." },
-        { "Passiva Nv1 (Vigia do Conves): Mantem a guarda dos marujos proximos; aliados adjacentes em cruz nao sofrem +25% de dano extra nem perdem estamina ao serem atacados em Descanso.",
-          "Passiva Nv4 (Ordem de Abordagem): Sua presenca inspira ferocidade na tripulacao; aliados posicionados nas 4 casas adjacentes em cruz causam +20% de dano em todos os ataques." },
-        { "Passiva Nv1 (Olho de Aguia): Quanto mais perto o alvo estiver da mira do seu rifle, mais certeiro e o disparo: recebe +5% de Precisao para cada quadrado de aproximacao (ate +25% a 1 casa).",
-          "Passiva Nv4 (Ponto Vital): A curta distancia seus tiros destrocam a defesa rival, concedendo +10% de dano adicional para cada quadrado mais proximo do alvo (ate +50% a 1 casa)." }
+        { "Passiva Nv1 (Ração de Reserva): Uma vez por turno, pode utilizar 1 item consumível da mochila instantaneamente sem gastar nenhuma de suas ações básicas.",
+          "Passiva Nv4 (Tempero Secreto): Domina a alquimia culinária do navio, aumentando em +20% a eficácia de qualquer item consumível utilizado em seu turno." },
+        { "Passiva Nv1 (Vigia do Convés): Mantém a guarda dos marujos próximos; aliados adjacentes em cruz não sofrem +25% de dano extra nem perdem estamina ao serem atacados em Descanso.",
+          "Passiva Nv4 (Ordem de Abordagem): Sua presença inspira ferocidade na tripulação; aliados posicionados nas 4 casas adjacentes em cruz causam +20% de dano em todos os ataques." },
+        { "Passiva Nv1 (Olho de Águia): Quanto mais perto o alvo estiver da mira do seu rifle, mais certeiro é o disparo: recebe +5% de Precisão para cada quadrado de aproximação (até +25% a 1 casa).",
+          "Passiva Nv4 (Ponto Vital): A curta distância seus tiros destroçam a defesa rival, concedendo +10% de dano adicional para cada quadrado mais próximo do alvo (até +50% a 1 casa)." }
     };
     if (classe < CLASSE_BUCANEIRO || classe > CLASSE_GAVEA) {
         return "Sem passiva definida.";
@@ -1572,97 +1619,129 @@ static const char *descricaoPassivaInimigo(const Combatente *unidade)
     }
     if (unidade->eh_boss) {
         return unidade->fase_boss == 2 ?
-            "Fase 2 Ativa (Furia do Kraken - <=50% PV): Estamina maxima sobe para 20, invocou 2 Grunts com Espada, planta Minas explosivas (50 dano) a cada 2 movimentos e seus ataques aplicam Veneno!" :
-            "Fase 1 (Senhor do Conves): Executa 3 turnos completos por rodada (Velocidades 8, 6 e 4) com 15 de Estamina. Ao cair para 50% de Vida ou menos, desperta a Fase 2!";
+            "Fase 2 Ativa (Fúria do Kraken - <=50% PV): Estamina máxima sobe para 20, invocou 2 Grunts com Espada, planta Minas explosivas (50 de dano) a cada 2 movimentos e seus ataques aplicam Envenenamento (-10% da Vida Máx por 2 turnos)!" :
+            "Fase 1 (Senhor do Convés): Executa 3 turnos completos por rodada (Velocidades 8, 6 e 4) com 15 de Estamina. Ao cair para 50% de Vida ou menos, desperta a Fase 2!";
     }
     if (unidade->tipo_inimigo == INIMIGO_GRUNT_ESPADA) {
-        return "Passiva (Lamina Serrilhada): Ao acertar 3 vezes o ataque Corte no mesmo pirata durante o combate, abre uma hemorragia que aplica Sangramento (20 de dano por turno durante 3 turnos).";
+        return "Passiva (Lâmina Serrilhada): Ao acertar 3 vezes o ataque Corte no mesmo pirata durante o combate, abre uma hemorragia que aplica Sangramento (-15% da Vida Máxima por turno durante 2 turnos).";
     }
     if (unidade->tipo_inimigo == INIMIGO_GRUNT_PISTOLA) {
-        return "Comportamento Tatico: Dispara Tiro de pistola em linha reta (alcance de 2 quadrados) no primeiro alvo a frente ou lanca Granada explosiva em cruz atingindo inimigos (100%) e aliados (50%).";
+        return "Comportamento Tático: Dispara Tiro de pistola em linha reta (alcance de 2 quadrados) no primeiro alvo à frente ou lança Granada explosiva em cruz atingindo inimigos (100%) e aliados (50%).";
     }
     if (unidade->tipo_inimigo == INIMIGO_ATIRADOR_MAGRELO) {
-        return "Comportamento Tatico: Recua sempre que possivel para manter distancia segura e disparar seu mosquete pesado em linha reta a ate 4 quadrados (25 de dano minimo ou 60 de dano maximo).";
+        return "Comportamento Tático: Recua sempre que possível para manter distância segura e disparar seu mosquete pesado em linha reta a até 3 quadrados de alcance.";
     }
-    return "Comportamento Tatico: Dispara Escopeta em linha reta a ate 2 quadrados (50/70 de dano a 1 casa ou 25/40 a 2 casas) e aplica Bandagens em aliados feridos adjacentes (+15 PV por 3 turnos).";
+    return "Comportamento Tático: Dispara Escopeta numa linha de 2 quadrados (causando dano máximo a 1 casa e dano mínimo a 2 casas, igual ao Bacamarte) e aplica Bandagens que curam 10% da Vida Máxima por 3 turnos.";
 }
 
 // Retorna a explicação criativa, temática e fiel ao código atual de cada habilidade.
 static const char *descricaoHabilidadeDetalhada(const Combatente *unidade, int indiceHab)
 {
+    static char bufferInimigo[512];
+    const Habilidade *hab;
     if (unidade == NULL || indiceHab < 0 || indiceHab >= MAX_HABILIDADES) {
         return "";
     }
+    hab = &unidade->habilidades[indiceHab];
     if (unidade->aliado) {
         if (unidade->classe == CLASSE_BUCANEIRO) {
             if (indiceHab == 0) {
-                return "Desfere um golpe feroz de cutelo a 1 quadrado de alcance. Acertar 2 vezes o mesmo inimigo no combate abre um ferimento profundo que aplica Sangramento (20 de dano por turno durante 3 turnos).";
+                return "Desfere um golpe feroz de cutelo a 1 quadrado de alcance. Acertar 2 vezes o mesmo inimigo no combate abre um ferimento profundo que aplica Sangramento (-15% da Vida Máxima por turno durante 2 turnos).";
             }
             if (indiceHab == 1) {
-                return "Arremessa um punhado de areia salgada do conves numa faixa perpendicular de 1x3 quadrados (alcance 1). Cega e aplica Atordoamento por 1 turno em todas as unidades na area (afeta inimigos e aliados).";
+                return "Arremessa um punhado de areia salgada do convés numa faixa perpendicular de 1x3 quadrados (alcance 1, sem empurrar). Cega e aplica Atordoamento por 1 turno em todas as unidades na área.";
             }
-            return "Lanca-se em disparada com a lamina em punho por 2 quadrados em linha reta, atravessando quem estiver na frente (para na 2a ou 3a casa livre). Atinge todos na linha (aliados sofrem 50%) e converte 70% de todo o dano causado em Vida para o Bucaneiro!";
+            return "Lança-se em disparada com a lâmina em punho por 2 quadrados em linha reta, atravessando quem estiver na frente (para na 2ª ou 3ª casa livre). Atinge todos na linha (aliados sofrem 50%) e converte 70% de todo o dano causado em Vida para o Bucaneiro!";
         }
         if (unidade->classe == CLASSE_TIMONEIRO) {
             if (indiceHab == 0) {
-                return "Golpeia o adversario a 1 quadrado de alcance com o peso bruto dos punhos e correntes de ferro do conves, causando dano corpo a corpo direto conforme sua Precisao.";
+                return "Golpeia o adversário a 1 quadrado de alcance com o peso bruto dos punhos e correntes de ferro do convés, causando dano corpo a corpo direto conforme sua Precisão.";
             }
             if (indiceHab == 1) {
-                return "Desaba um golpe demolidor de cima para baixo a 1 quadrado de alcance. Alem do pesado dano fisico, o impacto violento deixa o inimigo Atordoado por 1 turno inteiro.";
+                return "Desaba um golpe demolidor de cima para baixo a 1 quadrado de alcance. Além do pesado dano físico, o impacto violento deixa o inimigo Atordoado por 1 turno inteiro.";
             }
-            return "Arranca o pesado timao de carvalho e gira com forca brutal numa faixa 1x3 adjacente. Atinge todos na area (aliados sofrem 50%), empurra 1 quadrado para tras e aplica Desnorteado (-2 Velocidade por 2 turnos).";
+            return "Arranca o pesado timão de carvalho e gira com força brutal numa faixa 1x3 adjacente. Atinge todos na área (aliados sofrem 50%), empurra 1 quadrado para trás e aplica Desnorteado (-2 Velocidade por 2 turnos).";
         }
         if (unidade->classe == CLASSE_COZINHEIRO) {
             if (indiceHab == 0) {
-                return "Serve uma refeicao fumegante preparada no caldeirao do navio para si mesmo ou para um aliado a ate 2 quadrados em linha reta. Cura garantidamente 35% da Vida Maxima total do alvo!";
+                return "Serve uma refeição fumegante preparada no caldeirão do navio para si mesmo ou para um aliado a até 2 quadrados em linha reta. Cura garantidamente 35% da Vida Máxima total do alvo!";
             }
             if (indiceHab == 1) {
-                return "Dispara uma rajada de chumbo grosso com seu bacamarte de cano largo numa linha reta de 2 quadrados, atingindo todos na linha (aliados sofrem 50%). Causa dano maximo e empurra 1 casa quem estiver a 1 quadrado, e dano menor a 2 quadrados.";
+                return "Dispara uma rajada de chumbo grosso com seu bacamarte de cano largo numa linha reta de 2 quadrados (sem empurrar inimigos). Atinge todos na linha (aliados sofrem 50%), causando dano maior a 1 quadrado de distância e dano menor a 2 quadrados.";
             }
-            return "Toca o sino do conves e serve um banquete revigorante numa area de 2x3 quadrados ao redor do Cozinheiro. Todos os aliados dentro da area recuperam garantidamente 70% de sua Vida Maxima total!";
+            return "Toca o sino do convés e serve um banquete revigorante numa área de 2x3 quadrados ao redor do Cozinheiro. Todos os aliados dentro da área recuperam garantidamente 70% de sua Vida Máxima total!";
         }
         if (unidade->classe == CLASSE_CAPITAO) {
             if (indiceHab == 0) {
-                return "Ataque hibrido de abordagem em linha reta: a 1 quadrado golpeia com seu sabre real causando dano maximo (70% Precisao); a 2 quadrados saca sua garrucha dourada causando dano de tiro (60% Precisao).";
+                return "Ataque híbrido de abordagem em linha reta: a 1 quadrado golpeia com seu sabre real causando dano máximo (70% Precisão); a 2 quadrados saca sua garrucha dourada causando dano de tiro (60% Precisão).";
             }
             if (indiceHab == 1) {
-                return "Brada ordens a ate 2 quadrados em linha reta. Em aliado: concede Motivacao por 2t (+2 Velocidade, +20% Precisao, +1 Estamina Max e +2 Estamina no proximo turno). Em inimigo: aplica Desmoralizado por 2t (-15% Precisao e +1 custo de Estamina).";
+                return "Brada ordens a até 2 quadrados em linha reta. Em aliado: concede Motivação durante 3 turnos (+40% de Precisão, +2 de Velocidade e +1 carga de Estamina Máxima). Em inimigo: aplica Desmoralizado por 2 turnos (-15% Precisão e +1 custo de Estamina).";
             }
-            return "Ordena fogo cerrado da bateria lateral do navio sobre qualquer zona de 3x2 quadrados do tabuleiro! O bombardeio atinge todas as unidades nos 6 quadrados (aliados na area recebem 50% do dano).";
+            return "Ordena fogo cerrado da bateria lateral do navio sobre qualquer zona de 3x2 quadrados do tabuleiro! O bombardeio atinge todas as unidades nos 6 quadrados (aliados na área recebem 50% do dano).";
         }
         if (unidade->classe == CLASSE_GAVEA) {
             if (indiceHab == 0) {
-                return "Firma a coronha do seu rifle de pederneira no alto da gavea e dispara um projetil de chumbo em linha reta a ate 3 quadrados no primeiro inimigo a frente, ficando mais preciso e letal conforme se aproxima.";
+                return "Firma a coronha do seu rifle de pederneira no alto da gávea e dispara um projétil de chumbo em linha reta a até 3 quadrados no primeiro inimigo à frente, ficando mais preciso e letal conforme se aproxima.";
             }
             if (indiceHab == 1) {
-                return "Sopra um dardo silencioso a ate 2 quadrados em linha reta. Em inimigo: inocula Veneno por 2 turnos (20 dano/turno, -3 Velocidade e -15% dano). Em aliado: aplica ervas que curam 20% da Vida Maxima ao longo de 2 turnos (10% por turno).";
+                return "Sopra um dardo silencioso a até 2 quadrados em linha reta. Em inimigo: inocula Envenenamento por 2 turnos (-10% da Vida Máxima por turno, -3 Velocidade e -15% dano). Em aliado: aplica ervas que curam 20% da Vida Máxima ao longo de 2 turnos (10% por turno).";
             }
-            return "Carrega o rifle com polvora dupla e dispara uma bala macica que atravessa todas as 6 casas da linha reta! Perfura todos os inimigos alinhados causando dano devastador (aliados na linha de tiro recebem 50%).";
+            return "Carrega o rifle com pólvora dupla e dispara uma bala maciça que atravessa todas as 6 casas da linha reta! Perfura todos os inimigos alinhados causando dano devastador (aliados na linha de tiro recebem 50%).";
         }
     }
     if (unidade->eh_boss) {
         if (indiceHab == 0) {
-            return "Golpe brutal de sabre a 1 quadrado de alcance. Na Fase 2 recebe +15% de dano adicional e envenena o pirata atingido por 2 turnos.";
+            (void)snprintf(bufferInimigo, sizeof(bufferInimigo),
+                           "Golpe brutal do sabre amaldiçoado de Barba Negra a %d quadrado de alcance (Custo: %d Est | Precisão: %d%%). Causa %d de dano mínimo ou %d de dano máximo. Na Fase 2 recebe +15%% de dano e aplica Envenenamento (-10%% da Vida Máx por 2 turnos).",
+                           hab->alcance, hab->custo_estamina, hab->precisao, hab->dano_min, hab->dano_max);
+            return bufferInimigo;
         }
         if (indiceHab == 1) {
-            return "Disparo pesado de pistola em linha reta a ate 3 quadrados no primeiro pirata a frente. Na Fase 2 recebe +20% de dano adicional.";
+            (void)snprintf(bufferInimigo, sizeof(bufferInimigo),
+                           "Saca sua pistola de cano duplo e dispara em linha reta a até %d quadrados no primeiro pirata à frente (Custo: %d Est | Precisão: %d%%). Causa %d de dano mínimo ou %d de dano máximo (+20%% de dano na Fase 2).",
+                           hab->alcance, hab->custo_estamina, hab->precisao, hab->dano_min, hab->dano_max);
+            return bufferInimigo;
         }
-        return "Bombardeio supremo de canhoes numa zona 3x2 em qualquer parte do conves, atingindo todas as unidades na area (na Fase 2 tambem aplica Veneno por 2 turnos).";
+        (void)snprintf(bufferInimigo, sizeof(bufferInimigo),
+                       "Ordena uma salva devastadora de canhões numa zona 3x2 em qualquer parte do convés (Alcance: %d | Custo: %d Est | Precisão: %d%%). Causa %d de dano mínimo ou %d de dano máximo em todos na área (aliados dele sofrem 50%%; na Fase 2 aplica Envenenamento por 2t).",
+                       hab->alcance, hab->custo_estamina, hab->precisao, hab->dano_min, hab->dano_max);
+        return bufferInimigo;
     }
     if (unidade->tipo_inimigo == INIMIGO_GRUNT_ESPADA) {
-        return "Golpeia com seu cutelo enferrujado a 1 quadrado de alcance. Ao acertar 3 cortes no mesmo pirata durante o combate, aplica Sangramento (20 de dano por 3 turnos).";
+        (void)snprintf(bufferInimigo, sizeof(bufferInimigo),
+                       "Avança pelo convés e golpeia com seu cutelo serrilhado a %d quadrado de alcance (Custo: %d Est | Precisão: %d%%), causando %d de dano mínimo ou %d de dano máximo. Ao acertar 3 cortes no mesmo pirata, aplica Sangramento (-15%% da Vida Máxima por 2 turnos).",
+                       hab->alcance, hab->custo_estamina, hab->precisao, hab->dano_min, hab->dano_max);
+        return bufferInimigo;
     }
     if (unidade->tipo_inimigo == INIMIGO_GRUNT_PISTOLA) {
-        return indiceHab == 0 ?
-            "Saca sua pistola pederneira e dispara em linha reta a ate 2 quadrados de alcance no primeiro pirata posicionado a frente." :
-            "Arremessa uma granada de polvora negra a ate 2 quadrados que explode em cruz (5 casas), atingindo inimigos (100%) e aliados na area (50%).";
+        if (indiceHab == 0) {
+            (void)snprintf(bufferInimigo, sizeof(bufferInimigo),
+                           "Aponta sua pistola pederneira e dispara em linha reta a até %d quadrados no primeiro pirata à frente (Custo: %d Est | Precisão: %d%%), causando %d de dano mínimo ou %d de dano máximo.",
+                           hab->alcance, hab->custo_estamina, hab->precisao, hab->dano_min, hab->dano_max);
+        } else {
+            (void)snprintf(bufferInimigo, sizeof(bufferInimigo),
+                           "Arremessa uma granada de pólvora negra a até %d quadrados que explode em cruz (5 casas | Custo: %d Est | Precisão: %d%%), causando %d de dano mínimo ou %d de dano máximo em todos na área (aliados dele recebem 50%%).",
+                           hab->alcance, hab->custo_estamina, hab->precisao, hab->dano_min, hab->dano_max);
+        }
+        return bufferInimigo;
     }
     if (unidade->tipo_inimigo == INIMIGO_ATIRADOR_MAGRELO) {
-        return "Aponta seu mosquete longo e dispara em linha reta a ate 4 quadrados de distancia no primeiro pirata a frente, causando 25 de dano minimo ou 60 de dano maximo.";
+        (void)snprintf(bufferInimigo, sizeof(bufferInimigo),
+                       "Firma o mosquete longo no ombro e dispara em linha reta a até %d quadrados de alcance no primeiro pirata à frente (Custo: %d Est | Precisão: %d%%), causando %d de dano mínimo ou %d de dano máximo.",
+                       hab->alcance, hab->custo_estamina, hab->precisao, hab->dano_min, hab->dano_max);
+        return bufferInimigo;
     }
-    return indiceHab == 0 ?
-        "Dispara chumbo espalhado em linha reta a ate 2 quadrados: causa dano total (50 ou 70) a 1 quadrado, ou dano reduzido (25 ou 40) a 2 quadrados de distancia." :
-        "Enfaixa um aliado ferido adjacente (1 quadrado), aplicando regeneracao continua que restaura +15 PV por turno durante 3 turnos (45 PV no total).";
+    if (indiceHab == 0) {
+        (void)snprintf(bufferInimigo, sizeof(bufferInimigo),
+                       "Dispara uma rajada de chumbo com sua escopeta numa linha reta de %d quadrados (Custo: %d Est), funcionando igual ao Bacamarte do Cozinheiro: atinge todos na linha (aliados sofrem 50%%), causando %d de dano a 1 quadrado e %d de dano a 2 quadrados!",
+                       hab->alcance, hab->custo_estamina, hab->dano_max, hab->dano_min);
+    } else {
+        (void)snprintf(bufferInimigo, sizeof(bufferInimigo),
+                       "Enfaixa um inimigo ferido adjacente (%d quadrado de alcance | Custo: %d Est), aplicando regeneração que cura 10%% da Vida Máxima total do alvo por turno durante 3 turnos (30%% no total).",
+                       hab->alcance, hab->custo_estamina);
+    }
+    return bufferInimigo;
 }
 
 // Retorna uma descrição temática e completa do efeito de um item pelo seu ID.
@@ -1670,29 +1749,29 @@ static const char *descricaoItemCatalogo(int idItem)
 {
     switch (idItem) {
     case 1:
-        return "Consumivel: Gaze limpa embebida em rum esterilizante. Estanca ferimentos e cura imediatamente 40% da Vida Maxima de quem utilizar (48% com Cozinheiro Nv 4).";
+        return "Consumível: Gaze limpa embebida em rum esterilizante. Estanca ferimentos e cura imediatamente 40% da Vida Máxima de quem utilizar (48% com Cozinheiro Nv 4).";
     case 2:
-        return "Consumivel: Elixir picante de polvora e especiarias. Desperta a furia pirata concedendo +20% de dano nos ataques por 2 turnos (+24% com Cozinheiro Nv 4).";
+        return "Consumível: Elixir picante de pólvora e especiarias. Desperta a fúria pirata concedendo +20% de dano nos ataques por 2 turnos (+24% com Cozinheiro Nv 4).";
     case 3:
-        return "Consumivel: Travesseiro macio saqueado de um galeao real. Recupera o folego na hora, restaurando 100% da Estamina Maxima do pirata.";
+        return "Consumível: Travesseiro macio saqueado de um galeão real. Recupera o fôlego na hora, restaurando 100% da Estamina Máxima do pirata.";
     case 4:
-        return "Consumivel: Diario antigo com segredos de navegacao e combate. Promove o pirata em +2 Niveis permanentes (+20% Vida e Dano por nivel).";
+        return "Consumível: Diário antigo com segredos de navegação e combate. Promove o pirata em +2 Níveis permanentes (+20% Vida e Dano por nível).";
     case 5:
-        return "Passivo de Build: Gibao reforçado com couro curtido e placas leves. Amortece golpes e tiros reduzindo em -15% todo o dano recebido pelo pirata.";
+        return "Passivo de Build: Gibão reforçado com couro curtido e placas leves. Amortece golpes e tiros reduzindo em -15% todo o dano recebido pelo pirata.";
     case 6:
-        return "Passivo de Build: Pedra aspera de amolar laminas no conves. Mantem sabres e cutelos afiados, concedendo +20% de dano em ataques corpo a corpo (Melee).";
+        return "Passivo de Build: Pedra áspera de amolar lâminas no convés. Mantém sabres e cutelos afiados, concedendo +20% de dano em ataques corpo a corpo (Melee).";
     case 7:
-        return "Passivo de Build: Lentes polidas de cristal nautico que apuram a mira. Aumentam em +25% a Precisao (chance de causar Dano Maximo) nos ataques.";
+        return "Passivo de Build: Lentes polidas de cristal náutico que apuram a mira. Aumentam em +25% a Precisão (chance de causar Dano Máximo) nos ataques.";
     case 8:
-        return "Passivo de Build: Botas de couro flexivel para correr pelas pranchas. Concedem +1 quadrado extra de alcance em cada acao de Mover do pirata.";
+        return "Passivo de Build: Botas de couro flexível para correr pelas pranchas. Concedem +1 quadrado extra de alcance em cada ação de Mover do pirata.";
     case 9:
-        return "Passivo de Build: Municao especial de chumbo temperado que estilhaca defesas. Aumenta em +35% o dano de todos os ataques a distancia e em area (Ranged).";
+        return "Passivo de Build: Munição especial de chumbo temperado que estilhaça defesas. Aumenta em +35% o dano de todos os ataques à distância e em área (Ranged).";
     case 10:
-        return "Passivo de Build: Amuleto entalhado em osso de baleia. Aumenta permanentemente em +2 pontos a Estamina Maxima do pirata enquanto estiver equipado.";
+        return "Passivo de Build: Amuleto entalhado em osso de baleia. Aumenta permanentemente em +2 pontos a Estamina Máxima do pirata enquanto estiver equipado.";
     case 11:
-        return "Passivo de Build: Garrafa lendaria abencoada pelo deus dos mares. Concede +1 Acao Basica extra em todos os turnos (3 acoes por turno!).";
+        return "Passivo de Build: Garrafa lendária abençoada pelo deus dos mares. Cada garrafa equipada concede +1 Ação Básica extra por turno (acumula até 5x na build!).";
     default:
-        return "Reliquia pirata conquistada na expedicao.";
+        return "Relíquia pirata conquistada na expedição.";
     }
 }
 
@@ -1714,26 +1793,28 @@ static void formatarCabecalhoHabilidade(const Combatente *unidade, int indiceHab
                 "ATIVA" : (indiceHab == 1 ? "BLOQ Nv3" : "BLOQ Nv6");
     if (hab->efeito == EFEITO_CURA) {
         if (modoCompacto) {
-            (void)snprintf(destino, tamanho, "%s (%d Est | Cura: %d%% da Vida Max)",
+            (void)snprintf(destino, tamanho, "%s (%d Est | Cura: %d%% da Vida Máx)",
                            hab->nome, hab->custo_estamina, hab->dano_max);
         } else {
             (void)snprintf(destino, tamanho,
-                           "[%s] %s | Cura: %d%% da Vida Max | Alcance: %d | Custo: %d Est",
+                           "[%s] %s | Cura: %d%% da Vida Máx | Alcance: %d | Custo: %d Est",
                            statusStr, hab->nome, hab->dano_max,
                            hab->alcance, hab->custo_estamina);
         }
     } else if (hab->efeito == EFEITO_CURA_CONTINUA) {
         int duracao = hab->duracao_efeito > 0 ? hab->duracao_efeito : 3;
         if (modoCompacto) {
-            (void)snprintf(destino, tamanho, "%s (%d Est | Cura: +%d PV/t por %dt)",
-                           hab->nome, hab->custo_estamina, hab->dano_min, duracao);
+            (void)snprintf(destino, tamanho, "%s (%d Est | Cura: %d%% da Vida Máx/t por %dt)",
+                           hab->nome, hab->custo_estamina, hab->dano_max, duracao);
         } else {
             (void)snprintf(destino, tamanho,
-                           "[%s] %s | Cura: +%d PV/turno (%dt, total %d PV) | Alcance: %d | Custo: %d Est",
-                           statusStr, hab->nome, hab->dano_min, duracao,
-                           hab->dano_min * duracao, hab->alcance, hab->custo_estamina);
+                           "[%s] %s | Cura: %d%% da Vida Máx/turno (%dt, total %d%%) | Alcance: %d | Custo: %d Est",
+                           statusStr, hab->nome, hab->dano_max, duracao,
+                           hab->dano_max * duracao, hab->alcance, hab->custo_estamina);
         }
-    } else if (unidade->aliado && unidade->classe == CLASSE_COZINHEIRO && indiceHab == 1) {
+    } else if ((unidade->aliado && unidade->classe == CLASSE_COZINHEIRO && indiceHab == 1) ||
+               (!unidade->aliado && !unidade->eh_boss &&
+                unidade->tipo_inimigo == INIMIGO_MARUJO_GORDO && indiceHab == 0)) {
         if (modoCompacto) {
             (void)snprintf(destino, tamanho,
                            "%s (%d Est | Linha 2 casas: %d dano a 1 casa / %d a 2 casas)",
@@ -1758,20 +1839,20 @@ static void formatarCabecalhoHabilidade(const Combatente *unidade, int indiceHab
     } else if (hab->efeito == EFEITO_VENENO && hab->dano_max == 0) {
         if (modoCompacto) {
             (void)snprintf(destino, tamanho,
-                           "%s (%d Est | Inimigo: Veneno 2t | Aliado: Cura 20%% Vida Max)",
+                           "%s (%d Est | Inimigo: Veneno -10%%/t (2t) | Aliado: Cura 20%% Vida Máx)",
                            hab->nome, hab->custo_estamina);
         } else {
             (void)snprintf(destino, tamanho,
-                           "[%s] %s | Inimigo: Veneno (2t) | Aliado: Cura 20%% da Vida Max (2t) | Alcance: %d | Custo: %d Est",
+                           "[%s] %s | Inimigo: Veneno -10%%/t (2t) | Aliado: Cura 20%% da Vida Máx (2t) | Alcance: %d | Custo: %d Est",
                            statusStr, hab->nome, hab->alcance, hab->custo_estamina);
         }
     } else if (hab->dano_max == 0) {
         if (modoCompacto) {
-            (void)snprintf(destino, tamanho, "%s (%d Est | Habilidade Tatica)",
+            (void)snprintf(destino, tamanho, "%s (%d Est | Habilidade Tática)",
                            hab->nome, hab->custo_estamina);
         } else {
             (void)snprintf(destino, tamanho,
-                           "[%s] %s | Efeito Tatico | Alcance: %d | Custo: %d Est",
+                           "[%s] %s | Efeito Tático | Alcance: %d | Custo: %d Est",
                            statusStr, hab->nome, hab->alcance, hab->custo_estamina);
         }
     } else {
@@ -1817,69 +1898,70 @@ static void desenharDetalhes(const InterfaceJogo *interfaceJogo, const Combatent
     offsetY = interfaceJogo->scroll_detalhes;
     DrawRectangle(160, 50, 740, 555, (Color){ 12, 19, 27, 252 });
     posY = 116 - offsetY;
-    if (posY >= minY && posY + 22 <= maxY) {
-        desenharTexto(unidade->nome, 185, posY, 22, unidade->aliado ? SKYBLUE : ORANGE);
+    if (posY >= minY && posY + 24 <= maxY) {
+        desenharTexto(unidade->nome, 185, posY, 23, unidade->aliado ? SKYBLUE : ORANGE);
     }
-    posY += 26;
+    posY += 28;
     posY += desenharTextoQuebrado(descricaoResumoPersonagem(unidade), 185, posY, 680,
-                                  13, 16, GOLD, minY, maxY) + 6;
-    if (posY >= minY && posY + 15 <= maxY) {
+                                  15, 19, GOLD, minY, maxY) + 8;
+    if (posY >= minY && posY + 16 <= maxY) {
         if (unidade->eh_boss) {
             desenharTexto(TextFormat("PV %d/%d | Estamina %d/%d | Fase %d | Velocidades: 8, 6 e 4",
                                      unidade->vida_atual, unidade->vida_maxima,
                                      unidade->estamina_atual, unidade->estamina_maxima,
                                      unidade->fase_boss),
-                          185, posY, 15, RAYWHITE);
+                          185, posY, 16, RAYWHITE);
         } else {
-            desenharTexto(TextFormat("PV %d/%d | Estamina %d/%d | Nivel %d | Velocidade %d",
+            desenharTexto(TextFormat("PV %d/%d | Estamina %d/%d | Nível %d | Velocidade %d | Ações/Turno: %d",
                                      unidade->vida_atual, unidade->vida_maxima,
                                      unidade->estamina_atual, unidade->estamina_maxima,
-                                     unidade->nivel, unidade->velocidade),
+                                     unidade->nivel, unidade->velocidade,
+                                     calcularAcoesPorTurno(unidade)),
                           185, posY, 15, RAYWHITE);
         }
     }
     posY += 22;
-    if (posY >= minY && posY + 14 <= maxY) {
+    if (posY >= minY && posY + 15 <= maxY) {
         if (unidade->aliado && unidade->classe == CLASSE_COZINHEIRO) {
-            desenharTexto("Cura Garantida (sem erro) | Dano do Bacamarte varia conforme a distancia",
-                          185, posY, 13, LIGHTGRAY);
+            desenharTexto("Cura Garantida (sem erro) | Dano do Bacamarte varia conforme a distância",
+                          185, posY, 14, LIGHTGRAY);
         } else {
-            desenharTexto(TextFormat("Chance Dano Max (Precisao): Melee %d%% | Ranged %d%% | Bonus Nv +%d%%",
+            desenharTexto(TextFormat("Chance Dano Máx (Precisão): Melee %d%% | Ranged %d%% | Bônus Nv +%d%%",
                                      unidade->precisao_melee, unidade->precisao_ranged,
                                      unidade->dano_base),
-                          185, posY, 13, LIGHTGRAY);
+                          185, posY, 14, LIGHTGRAY);
         }
     }
     posY += 24;
     if (posY >= minY && posY + 16 <= maxY) {
-        desenharTexto("EFEITOS ATIVOS (BUFFS / DEBUFFS):", 185, posY, 14, GOLD);
-        desenharIndicadoresStatusUnidade(unidade, 435, posY - 2, 420);
+        desenharTexto("EFEITOS ATIVOS (BUFFS / DEBUFFS):", 185, posY, 15, GOLD);
+        desenharIndicadoresStatusUnidade(unidade, 445, posY - 2, 410);
     }
     posY += 26;
     if (posY >= minY && posY + 16 <= maxY) {
-        desenharTexto("PASSIVAS E COMPORTAMENTO", 185, posY, 15, GOLD);
+        desenharTexto("PASSIVAS E COMPORTAMENTO", 185, posY, 16, GOLD);
     }
-    posY += 20;
+    posY += 22;
     if (unidade->aliado) {
         posY += desenharTextoQuebrado(descricaoPassiva(unidade->classe, false), 192, posY,
-                                      675, 12, 15, RAYWHITE, minY, maxY) + 4;
+                                      675, 14, 18, RAYWHITE, minY, maxY) + 6;
         posY += desenharTextoQuebrado(descricaoPassiva(unidade->classe, true), 192, posY,
-                                      675, 12, 15,
+                                      675, 14, 18,
                                       unidade->passiva_aprimorada ? GREEN : GRAY,
-                                      minY, maxY) + 8;
+                                      minY, maxY) + 10;
     } else {
         posY += desenharTextoQuebrado(descricaoPassivaInimigo(unidade), 192, posY,
-                                      675, 12, 15, RAYWHITE, minY, maxY) + 8;
+                                      675, 14, 18, RAYWHITE, minY, maxY) + 10;
     }
     if (posY >= minY && posY + 16 <= maxY) {
-        desenharTexto("HABILIDADES E ACOES", 185, posY, 15, GOLD);
+        desenharTexto("HABILIDADES E AÇÕES", 185, posY, 16, GOLD);
     }
     posY += 22;
     for (indice = 0; indice < MAX_HABILIDADES; indice++) {
         const Habilidade *habilidade = &unidade->habilidades[indice];
         bool desbloqueada = indice < unidade->habilidades_desbloqueadas;
         char cabecalho[192];
-        int alturaCard = 66;
+        int alturaCard = 84;
         if (habilidade->nome[0] == '\0') {
             continue;
         }
@@ -1889,25 +1971,25 @@ static void desenharDetalhes(const InterfaceJogo *interfaceJogo, const Combatent
             DrawRectangleLines(185, posY, 680, alturaCard, desbloqueada ? SKYBLUE : DARKGRAY);
         }
         if (posY + 4 >= minY && posY + 18 <= maxY) {
-            desenharTexto(cabecalho, 193, posY + 4, 12, desbloqueada ? RAYWHITE : GRAY);
+            desenharTexto(cabecalho, 193, posY + 4, 13, desbloqueada ? RAYWHITE : GRAY);
         }
         (void)desenharTextoQuebrado(descricaoHabilidadeDetalhada(unidade, indice),
-                                    193, posY + 21, 664, 11, 14,
+                                    193, posY + 22, 664, 13, 17,
                                     desbloqueada ? GOLD : GRAY, minY, maxY);
-        posY += alturaCard + 6;
+        posY += alturaCard + 8;
     }
     if (unidade->aliado) {
         posY += 4;
         if (posY >= minY && posY + 16 <= maxY) {
             desenharTexto(TextFormat("BUILD PASSIVA EQUIPADA (%d/%d)",
                                      unidade->build_passivos.tamanho,
-                                     MAX_ITENS_PASSIVOS), 185, posY, 15, GOLD);
+                                     MAX_ITENS_PASSIVOS), 185, posY, 16, GOLD);
         }
         posY += 22;
         if (unidade->build_passivos.inicio == NULL) {
-            if (posY >= minY && posY + 14 <= maxY) {
+            if (posY >= minY && posY + 15 <= maxY) {
                 desenharTexto("Nenhum item passivo equipado neste pirata.",
-                              195, posY, 13, LIGHTGRAY);
+                              195, posY, 14, LIGHTGRAY);
             }
         } else {
             NoItem *item;
@@ -1918,8 +2000,8 @@ static void desenharDetalhes(const InterfaceJogo *interfaceJogo, const Combatent
                 (void)snprintf(textoSlot, sizeof(textoSlot), "[Slot %d - %s] %s: %s",
                                slot, nomeRaridadeItem(item->item.raridade),
                                item->item.nome, descricaoItemCatalogo(item->item.id));
-                posY += desenharTextoQuebrado(textoSlot, 192, posY, 672, 12, 15,
-                                              corItem, minY, maxY) + 4;
+                posY += desenharTextoQuebrado(textoSlot, 192, posY, 672, 14, 18,
+                                              corItem, minY, maxY) + 6;
                 slot++;
             }
         }
@@ -1927,12 +2009,12 @@ static void desenharDetalhes(const InterfaceJogo *interfaceJogo, const Combatent
     DrawRectangle(161, 51, 738, 60, (Color){ 12, 19, 27, 255 });
     DrawRectangle(161, 589, 738, 15, (Color){ 12, 19, 27, 255 });
     DrawRectangleLines(160, 50, 740, 555, GOLD);
-    desenharTexto("FICHA DE INSPECAO DO PERSONAGEM", 185, 68, 21, GOLD);
-    desenharTexto("Role com o Scroll do Mouse", 535, 74, 13, LIGHTGRAY);
+    desenharTexto("FICHA DE INSPEÇÃO DO PERSONAGEM", 185, 68, 21, GOLD);
+    desenharTexto("Role com o Scroll do Mouse", 535, 74, 14, LIGHTGRAY);
     DrawRectangle(760, 68, 85, 38, (Color){ 60, 75, 87, 255 });
     desenharTexto("FECHAR", 772, 80, 14, RAYWHITE);
     DrawRectangle(880, 115, 8, 472, (Color){ 28, 40, 52, 255 });
-    barraY = 115 + (offsetY * 392) / 320;
+    barraY = 115 + (offsetY * 392) / 420;
     DrawRectangle(880, barraY, 8, 80, GOLD);
 }
 
@@ -1949,13 +2031,13 @@ void desenharTelaSelecaoGrupo(InterfaceJogo *interfaceJogo,
              totalDisponiveis : TOTAL_PIRATAS_PREDEFINIDOS;
     iniciarQuadroVirtual((Color){ 18, 28, 39, 255 });
     desenharTexto(contadorFugas > 0 ?
-                  "REPOSICAO DE TRIPULACAO POS-FUGA" :
-                  "ESCOLHA SUA TRIPULACAO",
+                  "REPOSIÇÃO DE TRIPULAÇÃO PÓS-FUGA" :
+                  "ESCOLHA SUA TRIPULAÇÃO",
                   contadorFugas > 0 ? 310 : 370, 42, 30, GOLD);
     desenharTexto(contadorFugas > 0 ?
-                  TextFormat("Selecione substitutos para os caidos (%d/3) - Mortos voltaram ao Nv 1 sem passivos",
+                  TextFormat("Selecione substitutos para os caídos (%d/3) - Mortos voltaram ao Nv 1 sem passivos",
                              interfaceJogo->total_selecionados) :
-                  TextFormat("Selecione 3 piratas para a expedicao (%d/3)",
+                  TextFormat("Selecione 3 piratas para a expedição (%d/3)",
                              interfaceJogo->total_selecionados),
                   contadorFugas > 0 ? 220 : 420, 92, 18, RAYWHITE);
     for (indice = 0; indice < limite; indice++) {
@@ -1977,13 +2059,13 @@ void desenharTelaSelecaoGrupo(InterfaceJogo *interfaceJogo,
                                      piratasDisponiveis[indice].velocidade),
                           cardX + 16, cardY + 52, 16, LIGHTGRAY);
         } else {
-            desenharTexto(TextFormat("HP %d | Precisao %d%% | Vel %d",
+            desenharTexto(TextFormat("HP %d | Precisão %d%% | Vel %d",
                                      piratasDisponiveis[indice].vida_maxima,
                                      piratasDisponiveis[indice].precisao_melee,
                                      piratasDisponiveis[indice].velocidade),
                           cardX + 16, cardY + 52, 16, LIGHTGRAY);
         }
-        desenharTexto(TextFormat("Estamina %d | Nivel %d | Passivos %d",
+        desenharTexto(TextFormat("Estamina %d | Nível %d | Passivos %d",
                                  piratasDisponiveis[indice].estamina_maxima,
                                  piratasDisponiveis[indice].nivel,
                                  piratasDisponiveis[indice].build_passivos.tamanho),
@@ -2019,8 +2101,8 @@ static void desenharMochila(const InterfaceJogo *interfaceJogo)
                               !interfaceJogo->fase_pre_combate_ativa;
     DrawRectangle(160, 50, 700, 555, (Color){ 12, 19, 27, 252 });
     DrawRectangleLines(160, 50, 700, 555, GOLD);
-    desenharTexto("MOCHILA DA TRIPULACAO E BUILDS PASSIVAS", 180, 68, 20, GOLD);
-    desenharTexto("Scroll: rolar itens", 595, 73, 12, LIGHTGRAY);
+    desenharTexto("MOCHILA DA TRIPULAÇÃO E BUILDS PASSIVAS", 180, 68, 20, GOLD);
+    desenharTexto("Scroll: rolar itens", 595, 73, 13, LIGHTGRAY);
     DrawRectangle(740, 68, 105, 38, (Color){ 60, 75, 87, 255 });
     desenharTexto(interfaceJogo->loja_aberta_pendente ? "VOLTAR LOJA" : "FECHAR",
                   interfaceJogo->loja_aberta_pendente ? 746 : 765, 80, 13, RAYWHITE);
@@ -2035,8 +2117,8 @@ static void desenharMochila(const InterfaceJogo *interfaceJogo)
                       posAbaX + 24, 121, 15, abaAtiva ? GOLD : RAYWHITE);
     }
     desenharTexto(somenteConsumiveis ?
-                  "ITENS NA MOCHILA (Em combate: apenas Consumiveis podem ser usados):" :
-                  "ITENS NA MOCHILA (Clique para Usar Consumivel ou Equipar Passivo na Build):",
+                  "ITENS NA MOCHILA (Em combate: apenas Consumíveis podem ser usados):" :
+                  "ITENS NA MOCHILA (Clique para Usar Consumível ou Equipar Passivo na Build):",
                   180, 156, 13, LIGHTGRAY);
     indice = 0;
     for (item = interfaceJogo->inventario == NULL ? NULL :
@@ -2056,9 +2138,9 @@ static void desenharMochila(const InterfaceJogo *interfaceJogo)
                                      item->item.tipo == ITEM_CONSUMIVEL ? "USAR" : "EQUIPAR",
                                      nomeRaridadeItem(item->item.raridade),
                                      item->item.nome, item->item.quantidade),
-                          188, posLinhaY + 3, 12, corRaridade);
+                          188, posLinhaY + 2, 13, corRaridade);
             (void)desenharTextoQuebrado(descricaoItemCatalogo(item->item.id),
-                                        188, posLinhaY + 18, 634, 10, 12,
+                                        188, posLinhaY + 17, 634, 12, 14,
                                         corRaridade, 174, 368);
         }
         indice++;
@@ -2077,7 +2159,7 @@ static void desenharMochila(const InterfaceJogo *interfaceJogo)
                              (selecionado != NULL && selecionado->aliado) ?
                              selecionado->build_passivos.tamanho : 0,
                              interfaceJogo->estado == TELA_MAPA_ROTAS ?
-                             "- Clique em um slot ocupado para devolver a Mochila" :
+                             "- Clique em um slot ocupado para devolver à Mochila" :
                              "(Travada em combate)"),
                   180, 384, 14, GOLD);
     if (selecionado != NULL && selecionado->aliado) {
@@ -2093,15 +2175,15 @@ static void desenharMochila(const InterfaceJogo *interfaceJogo)
                                          slot + 1,
                                          nomeRaridadeItem(passivo->item.raridade),
                                          passivo->item.nome),
-                              188, posSlotY + 2, 11, corPassivo);
+                              188, posSlotY + 2, 12, corPassivo);
                 (void)desenharTextoQuebrado(descricaoItemCatalogo(passivo->item.id),
-                                            188, posSlotY + 16, 634, 9, 11,
+                                            188, posSlotY + 16, 634, 11, 13,
                                             corPassivo, posSlotY, posSlotY + 33);
                 passivo = passivo->proximo;
             } else {
                 DrawRectangle(180, posSlotY, 650, 33, (Color){ 18, 28, 36, 255 });
                 DrawRectangleLines(180, posSlotY, 650, 33, DARKGRAY);
-                desenharTexto(TextFormat("[Slot %d Vazio - Disponivel para item passivo]",
+                desenharTexto(TextFormat("[Slot %d Vazio - Disponível para item passivo]",
                                          slot + 1),
                               188, posSlotY + 9, 12, GRAY);
             }
@@ -2118,7 +2200,7 @@ static void desenharLoja(const InterfaceJogo *interfaceJogo)
     desenharTexto("CAMINHO COMERCIAL - LOJA DA ROTA", 275, 75, 22, GOLD);
     DrawRectangle(740, 72, 105, 38, (Color){ 60, 75, 87, 255 });
     desenharTexto("FECHAR [X]", 750, 84, 14, RAYWHITE);
-    desenharTexto(TextFormat("Moedas de Ouro: %d | Saques realizados: %d (Inflacao +%d%%)",
+    desenharTexto(TextFormat("Moedas de Ouro: %d | Saques realizados: %d (Inflação +%d%%)",
                              interfaceJogo->moedas == NULL ? 0 : *interfaceJogo->moedas,
                              contadorSaques, contadorSaques * 25),
                   190, 128, 16, RAYWHITE);
@@ -2132,12 +2214,12 @@ static void desenharLoja(const InterfaceJogo *interfaceJogo)
                                        (Color){ 35, 35, 40, 255 };
         DrawRectangle(190, posItemY, 640, 78, corFundo);
         DrawRectangleLines(190, posItemY, 640, 78, estoque > 0 ? corRaridade : GRAY);
-        desenharTexto(TextFormat("[%s] %s | Preco: %d ouros | Estoque: %d/2",
+        desenharTexto(TextFormat("[%s] %s | Preço: %d ouros | Estoque: %d/2",
                                  nomeRaridadeItem(item->raridade),
                                  item->nome, preco, estoque),
-                      206, posItemY + 8, 16, estoque > 0 ? corRaridade : GRAY);
-        (void)desenharTextoQuebrado(descricaoItemCatalogo(item->id), 206, posItemY + 30,
-                                    612, 12, 15, estoque > 0 ? corRaridade : DARKGRAY, 0, 0);
+                      206, posItemY + 6, 16, estoque > 0 ? corRaridade : GRAY);
+        (void)desenharTextoQuebrado(descricaoItemCatalogo(item->id), 206, posItemY + 28,
+                                    612, 13, 17, estoque > 0 ? corRaridade : DARKGRAY, 0, 0);
     }
     DrawRectangle(185, 495, 200, 55, (Color){ 45, 95, 130, 255 });
     DrawRectangleLines(185, 495, 200, 55, GOLD);
@@ -2153,10 +2235,10 @@ static void desenharConfirmacaoFuga(void)
 {
     DrawRectangle(210, 200, 620, 295, (Color){ 12, 19, 27, 252 });
     DrawRectangleLines(210, 200, 620, 295, GOLD);
-    desenharTexto("Fugir da Aventura (Retornar a Rota 1)?", 295, 235, 22, GOLD);
-    desenharTexto("Piratas vivos mantem nivel e itens equipados nas builds.", 265, 282, 15, RAYWHITE);
+    desenharTexto("Fugir da Aventura (Retornar à Rota 1)?", 295, 235, 22, GOLD);
+    desenharTexto("Piratas vivos mantêm nível e itens equipados nas builds.", 265, 282, 15, RAYWHITE);
     desenharTexto("Piratas mortos podem ser reescolhidos no Nv 1 (sem passivos).", 260, 312, 15, SKYBLUE);
-    desenharTexto("Itens na mochila serao perdidos e inimigos terao +50% status!",
+    desenharTexto("Itens na mochila serão perdidos e inimigos terão +50% status!",
                   260, 342, 15, ORANGE);
     DrawRectangle(350, 420, 150, 50, (Color){ 140, 50, 40, 255 });
     DrawRectangle(530, 420, 150, 50, (Color){ 60, 75, 87, 255 });
@@ -2164,28 +2246,66 @@ static void desenharConfirmacaoFuga(void)
     desenharTexto("CANCELAR", 554, 436, 18, RAYWHITE);
 }
 
-// Desenha a barra superior da fila de iniciativa, destacando as 3 entradas do Chefe.
+// Retorna um nome conciso e legível da unidade para exibição clara na barra de iniciativa.
+static const char *nomeCurtoIniciativa(const Combatente *ator)
+{
+    if (ator == NULL) {
+        return "";
+    }
+    if (ator->aliado) {
+        return ator->nome;
+    }
+    if (ator->eh_boss) {
+        return "Barba Negra";
+    }
+    switch (ator->tipo_inimigo) {
+    case INIMIGO_GRUNT_ESPADA:
+        return "Grunt Espada";
+    case INIMIGO_GRUNT_PISTOLA:
+        return "Grunt Pistola";
+    case INIMIGO_ATIRADOR_MAGRELO:
+        return "Atirador Magrelo";
+    default:
+        return "Marujo Gordo";
+    }
+}
+
+// Desenha a barra superior da fila de iniciativa com ordem de turnos clara e sem números soltos.
 static void desenharFila(const InterfaceJogo *interfaceJogo)
 {
     int indice;
-    DrawRectangle(0, 0, LARGURA_VIRTUAL, 44, (Color){ 10, 17, 24, 240 });
-    desenharTexto("INICIATIVA", 12, 13, 14, GOLD);
-    for (indice = 0; indice < interfaceJogo->total_iniciativa && indice < 10; indice++) {
+    int slotVisivel = 0;
+    int totalVivos = 0;
+    int larguraCard;
+    int passoCard;
+    for (indice = 0; indice < interfaceJogo->total_iniciativa; indice++) {
         Combatente *ator = interfaceJogo->fila_iniciativa[indice].ator;
-        int posCardX = 112 + indice * 115;
+        if (ator != NULL && ator->vivo) {
+            totalVivos++;
+        }
+    }
+    larguraCard = totalVivos > 8 ? 114 : 138;
+    passoCard = larguraCard + 5;
+    DrawRectangle(0, 0, LARGURA_VIRTUAL, 44, (Color){ 10, 17, 24, 240 });
+    desenharTexto("ORDEM DE TURNO:", 10, 14, 13, GOLD);
+    for (indice = 0; indice < interfaceJogo->total_iniciativa && slotVisivel < 9; indice++) {
+        Combatente *ator = interfaceJogo->fila_iniciativa[indice].ator;
+        int posCardX = 136 + slotVisivel * passoCard;
         bool turnoAtivo = indice == interfaceJogo->indice_iniciativa;
         if (ator == NULL || !ator->vivo) {
             continue;
         }
-        DrawRectangle(posCardX, 6, 110, 32, ator->aliado ?
+        DrawRectangle(posCardX, 6, larguraCard, 32, ator->aliado ?
                       (Color){ 35, 75, 105, 255 } : (Color){ 115, 55, 40, 255 });
         if (turnoAtivo) {
-            DrawRectangleLinesEx((Rectangle){ (float)posCardX, 6.0f, 110.0f, 32.0f },
-                                 2.0f, GOLD);
+            DrawRectangleLinesEx((Rectangle){ (float)posCardX, 6.0f, (float)larguraCard, 32.0f },
+                                 2.5f, GOLD);
+        } else {
+            DrawRectangleLines(posCardX, 6, larguraCard, 32, (Color){ 90, 110, 125, 180 });
         }
-        desenharTexto(TextFormat("%.*s (%d)", 8, ator->nome,
-                                 interfaceJogo->fila_iniciativa[indice].velocidade_efetiva),
-                      posCardX + 6, 14, 12, RAYWHITE);
+        desenharTexto(TextFormat("%dº %s", slotVisivel + 1, nomeCurtoIniciativa(ator)),
+                      posCardX + 6, 14, 12, turnoAtivo ? GOLD : RAYWHITE);
+        slotVisivel++;
     }
 }
 
@@ -2323,12 +2443,12 @@ static void desenharTabuleiro(const InterfaceJogo *interfaceJogo,
     }
 }
 
-// Desenha a tela de menu principal dentro do canvas virtual 1280x720.
+// Desenha a tela de menu principal renderizada em alta nitidez 1080p.
 static void desenharMenu(void)
 {
     iniciarQuadroVirtual((Color){ 18, 28, 39, 255 });
     desenharTexto("SEA OF GUNPOWDER", 435, 165, 36, GOLD);
-    desenharTexto("Cronicas de Sangue e Polvora - RPG Tatico Roguelike em Turnos", 295, 225, 20, RAYWHITE);
+    desenharTexto("Crônicas de Sangue e Pólvora - RPG Tático Roguelike em Turnos", 295, 225, 20, RAYWHITE);
     DrawRectangle(470, 350, 340, 70, (Color){ 45, 125, 70, 255 });
     desenharTexto("INICIAR AVENTURA", 525, 374, 22, RAYWHITE);
     desenharTexto("Controle 100% pelo Mouse | ESC abre o menu de Pause.", 420, 470, 16, LIGHTGRAY);
@@ -2373,7 +2493,7 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
         desenharTexto(TextFormat("MAPA DE ROTAS - ETAPA %d DE 3",
                                  etapaAtual < 3 ? etapaAtual + 1 : 3),
                       410, 55, 28, GOLD);
-        desenharTexto(TextFormat("Moedas de Ouro: %d | Saques: %d | Desistencias: %d",
+        desenharTexto(TextFormat("Moedas de Ouro: %d | Saques: %d | Desistências: %d",
                                  interfaceJogo->moedas == NULL ? 0 : *interfaceJogo->moedas,
                                  contadorSaques, contadorFugas),
                       390, 95, 18, RAYWHITE);
@@ -2388,13 +2508,13 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
             DrawRectangle(730, 290, 260, 95, (Color){ 70, 112, 75, 255 });
             DrawRectangle(585, 415, 260, 95, (Color){ 115, 77, 42, 255 });
             desenharTexto("CAMINHO 1 (4 Inimigos)", 458, 308, 18, RAYWHITE);
-            desenharTexto("+2 Niveis | +300 Ouros", 465, 336, 14, GOLD);
+            desenharTexto("+2 Níveis | +700 Ouros", 465, 336, 14, GOLD);
             desenharTexto("+15% Cura | +1 Item", 465, 358, 14, LIGHTGRAY);
             desenharTexto("CAMINHO 2 (3 Inimigos)", 748, 308, 18, RAYWHITE);
-            desenharTexto("+1 Nivel | +700 Ouros", 755, 336, 14, GOLD);
+            desenharTexto("+1 Nível | +300 Ouros", 755, 336, 14, GOLD);
             desenharTexto("+50% Cura | +2 Itens", 755, 358, 14, LIGHTGRAY);
             desenharTexto("CAMINHO 3: LOJA", 625, 433, 19, GOLD);
-            desenharTexto("3 Itens a venda (2 unid.)", 615, 461, 14, RAYWHITE);
+            desenharTexto("3 Itens à venda (2 unid.)", 615, 461, 14, RAYWHITE);
             desenharTexto("Ou Saquear Loja (+100% status)", 600, 483, 13, LIGHTGRAY);
         }
         DrawRectangle(90, 630, 190, 55,
@@ -2420,7 +2540,7 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
                         DrawRectangleLines(55, posCardY, 340, 82, GOLD);
                     }
                     desenharTexto(pirata->nome, 72, posCardY + 8, 18, RAYWHITE);
-                    desenharTexto(TextFormat("PV %d/%d | Nivel %d | Passivos %d/5",
+                    desenharTexto(TextFormat("PV %d/%d | Nível %d | Passivos %d/5",
                                              pirata->vida_atual, pirata->vida_maxima,
                                              pirata->nivel, pirata->build_passivos.tamanho),
                                   72, posCardY + 34, 14, LIGHTGRAY);
@@ -2431,12 +2551,12 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
     } else if (interfaceJogo->estado == TELA_COMBATE_3X6 && mapa != NULL) {
         desenharFila(interfaceJogo);
         if (interfaceJogo->fase_pre_combate_ativa) {
-            desenharTexto("FASE PRE-COMBATE: Clique nos piratas e nas Colunas 0 e 1 para posicionar/trocar!",
+            desenharTexto("FASE PRÉ-COMBATE: Clique nos piratas e nas Colunas 0 e 1 para posicionar/trocar!",
                           80, 62, 18, GOLD);
             desenharTexto("Inspecione qualquer unidade selecionando-a e clicando em DETALHES.",
                           80, 90, 15, LIGHTGRAY);
         } else {
-            desenharTexto(TextFormat("Turno: %s | Acoes restantes: %d",
+            desenharTexto(TextFormat("Turno: %s | Ações restantes: %d",
                                      interfaceJogo->ator_atual == NULL ?
                                      "aguardando" : interfaceJogo->ator_atual->nome,
                                      interfaceJogo->ator_atual == NULL ?
@@ -2449,7 +2569,7 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
             }
         }
         desenharTabuleiro(interfaceJogo, mapa, alcanceAtivo);
-        DrawRectangle(70, 604, 1170, 98, (Color){ 12, 20, 29, 235 });
+        DrawRectangle(70, 600, 1170, 102, (Color){ 12, 20, 29, 235 });
         if (interfaceJogo->fase_pre_combate_ativa) {
             DrawRectangle(90, 630, 260, 55, (Color){ 45, 125, 70, 255 });
             desenharTexto("INICIAR COMBATE", 132, 648, 19, RAYWHITE);
@@ -2467,7 +2587,7 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
             if (interfaceJogo->ator_atual != NULL && interfaceJogo->ator_atual->aliado) {
                 if (interfaceJogo->acao_combate == ACAO_TELA_MOVER) {
                     desenharTexto("MOVER: Clique em uma casa verde ortogonal vazia (custo: 1 Estamina).",
-                                  90, 608, 13, SKYBLUE);
+                                  90, 608, 14, SKYBLUE);
                 } else if (interfaceJogo->acao_combate >= ACAO_TELA_HABILIDADE_0 &&
                            interfaceJogo->acao_combate <= ACAO_TELA_HABILIDADE_2) {
                     int idxHab = interfaceJogo->acao_combate - ACAO_TELA_HABILIDADE_0;
@@ -2478,10 +2598,10 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
                     (void)snprintf(textoBarra, sizeof(textoBarra), "%s: %s",
                                    cabecalhoCompacto,
                                    descricaoHabilidadeDetalhada(interfaceJogo->ator_atual, idxHab));
-                    (void)desenharTextoQuebrado(textoBarra, 90, 603, 1135, 10, 12, GOLD, 602, 629);
+                    (void)desenharTextoQuebrado(textoBarra, 90, 601, 1135, 12, 14, GOLD, 600, 629);
                 } else {
-                    desenharTexto("Dica: Escolha uma acao abaixo ou clique em DETALHES para ver todas as descricoes.",
-                                  90, 608, 13, LIGHTGRAY);
+                    desenharTexto("Dica: Escolha uma ação abaixo ou clique em DETALHES para ver todas as descrições.",
+                                  90, 608, 14, LIGHTGRAY);
                 }
             }
             DrawRectangle(90, 630, 130, 55,
@@ -2518,13 +2638,13 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
             desenharTexto("DETALHES", 985, 648, 15, RAYWHITE);
         }
     } else if (interfaceJogo->estado == TELA_VITORIA) {
-        desenharTexto("VITORIA! BARBA NEGRA FOI DERROTADO!", 265, 250, 32, GOLD);
-        desenharTexto("A tripulacao conquistou os mares em Sea Of Gunpowder!",
+        desenharTexto("VITÓRIA! BARBA NEGRA FOI DERROTADO!", 265, 250, 32, GOLD);
+        desenharTexto("A tripulação conquistou os mares em Sea Of Gunpowder!",
                       330, 315, 20, RAYWHITE);
         DrawRectangle(470, 440, 340, 65, (Color){ 45, 125, 70, 255 });
         desenharTexto("NOVA AVENTURA", 540, 462, 22, RAYWHITE);
     } else if (interfaceJogo->estado == TELA_FIM_DE_JOGO) {
-        desenharTexto("FIM DE JOGO - TRIPULACAO DERROTADA", 290, 250, 32, ORANGE);
+        desenharTexto("FIM DE JOGO - TRIPULAÇÃO DERROTADA", 290, 250, 32, ORANGE);
         desenharTexto("Todos os seus piratas tombaram em combate.", 420, 315, 20, RAYWHITE);
         DrawRectangle(470, 440, 340, 65, (Color){ 45, 125, 70, 255 });
         desenharTexto("TENTAR NOVAMENTE", 518, 462, 22, RAYWHITE);
