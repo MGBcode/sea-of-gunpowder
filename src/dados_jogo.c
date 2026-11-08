@@ -122,10 +122,11 @@ bool criarPirataInicial(int indice, Combatente *destino)
         definirHabilidade(&destino->habilidades[0], "Comida da Boa", 0, 35, 100, 2, 2,
                           EFEITO_CURA, ATAQUE_RANGED);
         definirHabilidade(&destino->habilidades[1], "Bacamarte", 60, 100, 100, 2, 3,
-                          EFEITO_DANO, ATAQUE_CONE);
+                          EFEITO_KNOCKBACK, ATAQUE_LINHA);
         definirHabilidade(&destino->habilidades[2], "Hora do Rango", 0, 70, 100, 1, 6,
                           EFEITO_CURA, ATAQUE_AREA_2X3);
         destino->habilidades[1].fogo_amigo = true;
+        destino->habilidades[1].perfurante = true;
     } else if (indice == CLASSE_CAPITAO) {
         destino->precisao_ranged = 60;
         definirHabilidade(&destino->habilidades[0], "Saquear", 75, 100, 70, 2, 2,
@@ -179,7 +180,7 @@ bool criarInimigoInicial(int indice, Combatente *destino)
                           EFEITO_SANGRAMENTO, ATAQUE_MELEE);
         destino->habilidades[0].duracao_efeito = 3;
     } else if (indice == INIMIGO_GRUNT_PISTOLA) {
-        definirHabilidade(&destino->habilidades[0], "Tiro", 20, 30, 60, 3, 1,
+        definirHabilidade(&destino->habilidades[0], "Tiro", 20, 30, 60, 2, 1,
                           EFEITO_DANO, ATAQUE_LINHA);
         definirHabilidade(&destino->habilidades[1], "Granada", 40, 55, 60, 2, 4,
                           EFEITO_BOMBA, ATAQUE_CRUZ);
@@ -260,9 +261,7 @@ bool subirNivelPirata(Combatente *unidade, int niveisGanhos)
         return false;
     }
     for (item = unidade->build_passivos.inicio; item != NULL; item = item->proximo) {
-        if (item->item.id == 10) {
-            bonusColar += 2;
-        }
+        bonusColar += item->item.bonus_estamina;
     }
     for (passo = 0; passo < niveisGanhos; passo++) {
         int aumentoVida;

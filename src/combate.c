@@ -117,10 +117,15 @@ bool usarItemConsumivel(Combatente *unidade, Item *item)
         valor = valor + (valor * 20) / 100;
     }
     if (item->efeito_consumivel == CONSUMIVEL_CURAR_VIDA) {
+        int cura;
         if (valor <= 0 || unidade->vida_atual >= unidade->vida_maxima) {
             return false;
         }
-        unidade->vida_atual += valor;
+        cura = (unidade->vida_maxima * valor) / 100;
+        if (cura < 1) {
+            cura = 1;
+        }
+        unidade->vida_atual += cura;
         if (unidade->vida_atual > unidade->vida_maxima) {
             unidade->vida_atual = unidade->vida_maxima;
         }
@@ -896,6 +901,7 @@ static void executarAvancoImpetuoso(Tabuleiro3x6 *mapa, Combatente *atacante,
                           mapa->celulas[linDist2][colDist2] != NULL &&
                           mapa->celulas[linDist2][colDist2]->vivo;
     int distParada = unidadeEmDist2 ? 3 : 2;
+    int danoTotalCausado = 0;
     int curaRouboVida = 0;
     int dist;
     for (dist = 1; dist <= 2; dist++) {
@@ -919,10 +925,9 @@ static void executarAvancoImpetuoso(Tabuleiro3x6 *mapa, Combatente *atacante,
         }
         dano = calcularDanoFinal(mapa, atacante, alvo, habilidade, indiceHab, dist);
         danoCausado = aplicarDano(mapa, atacante, alvo, dano, habilidade->fogo_amigo);
-        if (alvo->aliado != atacante->aliado) {
-            curaRouboVida += danoCausado / 2;
-        }
+        danoTotalCausado += danoCausado;
     }
+    curaRouboVida = (danoTotalCausado * 70) / 100;
     if (curaRouboVida > 0 && atacante->vivo) {
         atacante->vida_atual += curaRouboVida;
         if (atacante->vida_atual > atacante->vida_maxima) {
@@ -1100,6 +1105,10 @@ void executarAtaqueOuHabilidade(Tabuleiro3x6 *mapa, Combatente *atacante, int in
         }
         if (temKnockback) {
             for (indiceAlvo = totalAlvosLista - 1; indiceAlvo >= 0; indiceAlvo--) {
+                if (atacante->aliado && atacante->classe == CLASSE_COZINHEIRO &&
+                    indiceHab == 1 && distAlvosLista[indiceAlvo] > 1) {
+                    continue;
+                }
                 aplicarKnockbackUnidade(mapa, alvosAtingidosLista[indiceAlvo],
                                         dirAxialLinha, dirAxialColuna);
             }

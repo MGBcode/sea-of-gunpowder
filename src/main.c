@@ -219,14 +219,14 @@ static bool testarClassesEMecanicasCombate(void)
     inimigoB.vida_atual = 300;
     inimigoA.linha = 1;
     inimigoA.coluna = 2;
-    inimigoB.linha = 0;
+    inimigoB.linha = 1;
     inimigoB.coluna = 3;
     mapa.celulas[1][1] = &cozinheiro;
     mapa.celulas[1][2] = &inimigoA;
-    mapa.celulas[0][3] = &inimigoB;
-    executarAtaqueOuHabilidade(&mapa, &cozinheiro, 1, 0, 3);
+    mapa.celulas[1][3] = &inimigoB;
+    executarAtaqueOuHabilidade(&mapa, &cozinheiro, 1, 1, 3);
     if (inimigoA.vida_atual != 200 || inimigoB.vida_atual != 240) {
-        fprintf(stderr, "Falha sanitaria: Bacamarte deve atingir toda a area em cone (100 perto e 60 longe).\n");
+        fprintf(stderr, "Falha sanitaria: Bacamarte deve atingir toda a linha de 2 quadrados (100 perto e 60 longe).\n");
         return false;
     }
     (void)subirNivelPirata(&cozinheiro, 5);
@@ -560,11 +560,18 @@ static bool executarTestesSanitarios(void)
     piratas[CLASSE_COZINHEIRO].vida_atual = 50;
     {
         Item bandagemTeste = itens[0];
-        if (!usarItemConsumivel(&piratas[CLASSE_COZINHEIRO], &bandagemTeste) ||
-            piratas[CLASSE_COZINHEIRO].vida_atual != 98 ||
+        Item bandagemBase = itens[0];
+        Combatente bucaneiroCura;
+        int curaEsperadaCozinheiro = (piratas[CLASSE_COZINHEIRO].vida_maxima * 48) / 100;
+        (void)criarPirataInicial(CLASSE_BUCANEIRO, &bucaneiroCura);
+        bucaneiroCura.vida_atual = 50;
+        if (!usarItemConsumivel(&bucaneiroCura, &bandagemBase) ||
+            bucaneiroCura.vida_atual != 50 + (bucaneiroCura.vida_maxima * 40) / 100 ||
+            !usarItemConsumivel(&piratas[CLASSE_COZINHEIRO], &bandagemTeste) ||
+            piratas[CLASSE_COZINHEIRO].vida_atual != 50 + curaEsperadaCozinheiro ||
             !piratas[CLASSE_COZINHEIRO].usou_consumivel_gratis_turno ||
             bandagemTeste.quantidade != 0) {
-            fprintf(stderr, "Falha sanitaria: passiva do Cozinheiro (+20%% e gratis).\n");
+            fprintf(stderr, "Falha sanitaria: Bandagem (40%% da vida max) e passiva do Cozinheiro (+20%% e gratis).\n");
             goto limpeza;
         }
     }
@@ -714,14 +721,28 @@ static bool executarTestesSanitarios(void)
         (void)memset(&mapaTeste, 0, sizeof(mapaTeste));
         (void)criarInimigoInicial(INIMIGO_GRUNT_PISTOLA, &gruntPistola);
         (void)criarPirataInicial(CLASSE_TIMONEIRO, &alvoTeste);
+        if (gruntPistola.habilidades[0].alcance != 2) {
+            fprintf(stderr, "Falha sanitaria: Grunt com Pistola deve ter alcance 2 com a pistola.\n");
+            goto limpeza;
+        }
         gruntPistola.habilidades[0].dano_min = 30;
         gruntPistola.habilidades[0].dano_max = 40;
         gruntPistola.linha = 1;
         gruntPistola.coluna = 4;
+        alvoTeste.vida_maxima = 200;
+        alvoTeste.vida_atual = 200;
         alvoTeste.linha = 1;
         alvoTeste.coluna = 1;
         mapaTeste.celulas[1][4] = &gruntPistola;
         mapaTeste.celulas[1][1] = &alvoTeste;
+        executarAtaqueOuHabilidade(&mapaTeste, &gruntPistola, 0, 1, 1);
+        if (alvoTeste.vida_atual != 200) {
+            fprintf(stderr, "Falha sanitaria: Grunt com Pistola nao deve alcancar 3 quadrados.\n");
+            goto limpeza;
+        }
+        mapaTeste.celulas[1][4] = NULL;
+        gruntPistola.coluna = 3;
+        mapaTeste.celulas[1][3] = &gruntPistola;
 
         gruntPistola.precisao_ranged = 0;
         gruntPistola.habilidades[0].precisao = 0;
@@ -1002,6 +1023,8 @@ static bool executarTestesSanitarios(void)
             (void)memset(&mapaTeste, 0, sizeof(mapaTeste));
             (void)criarPirataInicial(CLASSE_BUCANEIRO, &pirataLoja);
             pirataLoja.habilidades_desbloqueadas = 3;
+            pirataLoja.vida_maxima = 300;
+            pirataLoja.vida_atual = 50;
             pirataLoja.estamina_maxima = 10;
             pirataLoja.estamina_atual = 10;
             pirataLoja.precisao_melee = 100;
@@ -1018,9 +1041,37 @@ static bool executarTestesSanitarios(void)
             mapaTeste.celulas[1][1] = &alvoTeste;
             mapaTeste.celulas[1][2] = &inimigoFrente;
             executarAtaqueOuHabilidade(&mapaTeste, &pirataLoja, 2, 1, 2);
-            if (inimigoFrente.vida_atual != 350 || alvoTeste.vida_atual != 425) {
-                fprintf(stderr, "Falha sanitaria: Ultimate Bucaneiro deve atingir inimigos (100%%) e aliados (50%%) na linha.\n");
+            if (inimigoFrente.vida_atual != 350 || alvoTeste.vida_atual != 425 ||
+                pirataLoja.vida_atual != 50 + ((150 + 75) * 70) / 100) {
+                fprintf(stderr, "Falha sanitaria: Ultimate Bucaneiro deve atingir inimigos (100%%), aliados (50%%) e ter 70%% de roubo de vida total.\n");
                 goto limpeza;
+            }
+
+            {
+                ListaItens invBuild = { NULL, 0 };
+                Combatente bucBuild;
+                (void)criarPirataInicial(CLASSE_BUCANEIRO, &bucBuild);
+                if (!carregarInventarioSanitario(&invBuild, itens, totalItens) ||
+                    !aplicarItemPassivoNoPirata(&invBuild, &bucBuild, 5) ||
+                    bucBuild.build_passivos.tamanho != 1 ||
+                    bucBuild.build_passivos.inicio == NULL ||
+                    bucBuild.build_passivos.inicio->item.id != 5 ||
+                    !aplicarItemPassivoNoPirata(&invBuild, &bucBuild, 6) ||
+                    bucBuild.build_passivos.tamanho != 2 ||
+                    bucBuild.build_passivos.inicio == NULL ||
+                    bucBuild.build_passivos.inicio->item.id != 5 ||
+                    bucBuild.build_passivos.inicio->proximo == NULL ||
+                    bucBuild.build_passivos.inicio->proximo->item.id != 6 ||
+                    !aplicarItemPassivoNoPirata(&invBuild, &bucBuild, 10) ||
+                    bucBuild.build_passivos.tamanho != 3 ||
+                    bucBuild.estamina_maxima != 7) {
+                    fprintf(stderr, "Falha sanitaria: montagem de build com 2 ou mais equipamentos no Bucaneiro.\n");
+                    liberarListaItensCombatente(&bucBuild.build_passivos);
+                    liberarEstruturasJogo(NULL, &invBuild, NULL);
+                    goto limpeza;
+                }
+                liberarListaItensCombatente(&bucBuild.build_passivos);
+                liberarEstruturasJogo(NULL, &invBuild, NULL);
             }
 
             (void)memset(&mapaTeste, 0, sizeof(mapaTeste));
@@ -1089,22 +1140,22 @@ static bool executarTestesSanitarios(void)
             pirataLoja.linha = 1;
             pirataLoja.coluna = 0;
             alvoTeste.vida_atual = 500;
-            alvoTeste.linha = 0;
-            alvoTeste.coluna = 2;
+            alvoTeste.linha = 1;
+            alvoTeste.coluna = 1;
             inimigoFrente.vida_atual = 500;
             inimigoFrente.linha = 1;
-            inimigoFrente.coluna = 1;
+            inimigoFrente.coluna = 2;
             inimigoTras.vida_atual = 500;
-            inimigoTras.linha = 1;
+            inimigoTras.linha = 0;
             inimigoTras.coluna = 2;
             mapaTeste.celulas[1][0] = &pirataLoja;
-            mapaTeste.celulas[0][2] = &alvoTeste;
-            mapaTeste.celulas[1][1] = &inimigoFrente;
-            mapaTeste.celulas[1][2] = &inimigoTras;
-            executarAtaqueOuHabilidade(&mapaTeste, &pirataLoja, 1, 1, 1);
-            if (inimigoFrente.vida_atual != 400 || inimigoTras.vida_atual != 440 ||
-                alvoTeste.vida_atual != 470) {
-                fprintf(stderr, "Falha sanitaria: Bacamarte deve atingir inimigos (100%%) e aliados (50%%) no cone.\n");
+            mapaTeste.celulas[1][1] = &alvoTeste;
+            mapaTeste.celulas[1][2] = &inimigoFrente;
+            mapaTeste.celulas[0][2] = &inimigoTras;
+            executarAtaqueOuHabilidade(&mapaTeste, &pirataLoja, 1, 1, 2);
+            if (alvoTeste.vida_atual != 450 || inimigoFrente.vida_atual != 440 ||
+                inimigoTras.vida_atual != 500) {
+                fprintf(stderr, "Falha sanitaria: Bacamarte deve ser linha reta de 2 quadrados (aliados 50%%, inimigos 100%%, fora da linha ileso).\n");
                 goto limpeza;
             }
 

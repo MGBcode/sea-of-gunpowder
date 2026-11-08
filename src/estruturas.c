@@ -160,6 +160,7 @@ NoRota *fugirDaAventura(NoRota *raiz, ListaItens *inventarioGeral, int *nivelDif
 bool equiparItemPassivoBuild(ListaItens *inventario, ListaItens *buildPirata, int idItem)
 {
     NoItem **elo;
+    NoItem **fimBuild;
     NoItem *item;
     int itensNaBuild;
     if (inventario == NULL || buildPirata == NULL) {
@@ -176,11 +177,25 @@ bool equiparItemPassivoBuild(ListaItens *inventario, ListaItens *buildPirata, in
     if (*elo == NULL || (*elo)->item.tipo != ITEM_PASSIVO) {
         return false;
     }
-    item = *elo;
-    *elo = item->proximo;
-    inventario->tamanho--;
-    item->proximo = buildPirata->inicio;
-    buildPirata->inicio = item;
+    if ((*elo)->item.quantidade > 1) {
+        item = malloc(sizeof(*item));
+        if (item == NULL) {
+            return false;
+        }
+        item->item = (*elo)->item;
+        item->item.quantidade = 1;
+        (*elo)->item.quantidade--;
+    } else {
+        item = *elo;
+        *elo = item->proximo;
+        inventario->tamanho = contarItens(inventario);
+    }
+    item->proximo = NULL;
+    fimBuild = &buildPirata->inicio;
+    while (*fimBuild != NULL) {
+        fimBuild = &(*fimBuild)->proximo;
+    }
+    *fimBuild = item;
     buildPirata->tamanho = itensNaBuild + 1;
     return true;
 }
@@ -220,6 +235,7 @@ static void alterarAtributosItem(Combatente *pirata, const Item *item, int fator
 bool aplicarItemPassivoNoPirata(ListaItens *inventario, Combatente *pirata, int idItem)
 {
     NoItem *item;
+    Item itemCopia;
     if (inventario == NULL || pirata == NULL ||
         contarItens(&pirata->build_passivos) >= MAX_ITENS_PASSIVOS) {
         return false;
@@ -231,10 +247,11 @@ bool aplicarItemPassivoNoPirata(ListaItens *inventario, Combatente *pirata, int 
     if (item == NULL || item->item.tipo != ITEM_PASSIVO) {
         return false;
     }
+    itemCopia = item->item;
     if (!equiparItemPassivoBuild(inventario, &pirata->build_passivos, idItem)) {
         return false;
     }
-    alterarAtributosItem(pirata, &item->item, 1);
+    alterarAtributosItem(pirata, &itemCopia, 1);
     return true;
 }
 
@@ -255,11 +272,11 @@ bool desequiparItemPassivoBuild(ListaItens *inventario, Combatente *pirata, int 
     }
     item = *elo;
     *elo = item->proximo;
-    pirata->build_passivos.tamanho--;
+    pirata->build_passivos.tamanho = contarItens(&pirata->build_passivos);
     alterarAtributosItem(pirata, &item->item, -1);
     item->proximo = inventario->inicio;
     inventario->inicio = item;
-    inventario->tamanho++;
+    inventario->tamanho = contarItens(inventario);
     return true;
 }
 
