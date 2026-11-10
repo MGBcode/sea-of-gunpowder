@@ -20,6 +20,8 @@ typedef enum {
     POPUP_DETALHES_PERSONAGEM,
     POPUP_CONFIRMAR_FUGA,
     POPUP_RECOMPENSAS,
+    POPUP_CONFIRMAR_ROTA,
+    POPUP_CONFIRMAR_COMPRA,
     POPUP_PAUSE
 } TipoPopupModal;
 
@@ -59,6 +61,9 @@ typedef struct {
     bool saque_em_andamento;
     bool loja_aberta_pendente;
     bool sair_solicitado;
+    int escolha_rota_pendente;
+    int indice_compra_pendente;
+    int item_id_selecionado;
     int total_itens_loja;
     Item itens_loja[3];
     int estoques_loja[3];

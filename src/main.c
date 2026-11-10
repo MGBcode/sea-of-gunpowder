@@ -165,10 +165,15 @@ static bool testarClassesEMecanicasCombate(void)
         int vidaNivel6 = bucaneiro.vida_maxima;
         int danoNivel6 = bucaneiro.habilidades[0].dano_max;
         int estaminaNivel6 = bucaneiro.estamina_maxima;
-        int vidaEsperada = (vidaNivel6 * 120) / 100;
-        int danoEsperado = (danoNivel6 * 120) / 100;
-        vidaEsperada = (vidaEsperada * 120) / 100;
-        danoEsperado = (danoEsperado * 120) / 100;
+        int vidaEsperada = vidaNivel6;
+        int danoEsperado = danoNivel6;
+        int passo;
+        for (passo = 0; passo < 2; passo++) {
+            int aumentoVida = (vidaEsperada * 5) / 100;
+            int aumentoDano = (danoEsperado * 5) / 100;
+            vidaEsperada += aumentoVida > 0 ? aumentoVida : 1;
+            danoEsperado += aumentoDano > 0 ? aumentoDano : 1;
+        }
         (void)subirNivelPirata(&bucaneiro, 2);
         if (bucaneiro.nivel != 8 || bucaneiro.habilidades_desbloqueadas != 3 ||
             bucaneiro.vida_maxima != vidaEsperada ||
@@ -208,11 +213,18 @@ static bool testarClassesEMecanicasCombate(void)
     inimigoA.coluna = 3;
     mapa.celulas[1][1] = &bucaneiro;
     mapa.celulas[1][3] = &inimigoA;
+    (void)criarInimigoInicial(INIMIGO_GRUNT_ESPADA, &inimigoB);
+    inimigoB.vida_maxima = 600;
+    inimigoB.vida_atual = 600;
+    inimigoB.linha = 1;
+    inimigoB.coluna = 2;
+    mapa.celulas[1][2] = &inimigoB;
     mapa.mina_ativa[1][2] = 1;
     executarAtaqueOuHabilidade(&mapa, &bucaneiro, 2, 1, 3);
     if (bucaneiro.coluna != 4 || mapa.mina_ativa[1][2] != 0 ||
-        inimigoA.vida_atual >= 600 || bucaneiro.vida_atual <= 50) {
-        fprintf(stderr, "Falha sanitaria: Avanco Impetuoso (dash dist 3 + lifesteal + mina).\n");
+        inimigoA.vida_atual >= 600 || inimigoB.vida_atual >= 600 ||
+        bucaneiro.vida_atual <= 50) {
+        fprintf(stderr, "Falha sanitaria: Avanco Impetuoso deve causar dano garantido em área.\n");
         return false;
     }
 
@@ -227,11 +239,18 @@ static bool testarClassesEMecanicasCombate(void)
     inimigoA.vida_atual = 500;
     inimigoA.linha = 1;
     inimigoA.coluna = 2;
+    (void)criarInimigoInicial(INIMIGO_GRUNT_ESPADA, &inimigoB);
+    inimigoB.vida_maxima = 500;
+    inimigoB.vida_atual = 500;
+    inimigoB.linha = 0;
+    inimigoB.coluna = 2;
     mapa.celulas[1][1] = &timoneiro;
     mapa.celulas[1][2] = &inimigoA;
+    mapa.celulas[0][2] = &inimigoB;
     executarAtaqueOuHabilidade(&mapa, &timoneiro, 2, 1, 2);
-    if (inimigoA.coluna != 3 || inimigoA.turnos_desnorteado != 2) {
-        fprintf(stderr, "Falha sanitaria: Giro do Timao (knockback + desnortear).\n");
+    if (inimigoA.coluna != 3 || inimigoA.turnos_desnorteado != 2 ||
+        inimigoB.vida_atual >= 500) {
+        fprintf(stderr, "Falha sanitaria: Giro do Timão deve causar dano garantido em área.\n");
         return false;
     }
 
@@ -279,6 +298,22 @@ static bool testarClassesEMecanicasCombate(void)
     executarAtaqueOuHabilidade(&mapa, &cozinheiro, 0, 0, 1);
     if (bucaneiro.vida_atual != 50) {
         fprintf(stderr, "Falha sanitaria: Comida da Boa deve curar 20%% da Vida Máxima.\n");
+        return false;
+    }
+    (void)memset(&mapa, 0, sizeof(mapa));
+    (void)criarPirataInicial(CLASSE_COZINHEIRO, &cozinheiro);
+    (void)criarInimigoInicial(INIMIGO_GRUNT_ESPADA, &inimigoA);
+    cozinheiro.linha = 1;
+    cozinheiro.coluna = 1;
+    inimigoA.linha = 1;
+    inimigoA.coluna = 3;
+    inimigoA.vida_atual = inimigoA.vida_maxima;
+    mapa.celulas[1][1] = &cozinheiro;
+    mapa.celulas[1][3] = &inimigoA;
+    executarAtaqueOuHabilidade(&mapa, &cozinheiro, 0, 1, 3);
+    if (inimigoA.turnos_veneno != 2 ||
+        inimigoA.vida_atual != inimigoA.vida_maxima) {
+        fprintf(stderr, "Falha sanitaria: Comida da Boa deve envenenar inimigos sem perder a cura aliada.\n");
         return false;
     }
 
@@ -623,6 +658,84 @@ static bool testarClassesEMecanicasCombate(void)
             return false;
         }
     }
+    {
+        Combatente elite;
+        if (!criarInimigoInicial(INIMIGO_GRUNT_ESPADA, &elite)) {
+            fprintf(stderr, "Falha sanitaria: criacao de elite.\n");
+            return false;
+        }
+        aplicarBuffElite(&elite);
+        if (!elite.eh_elite || elite.vida_maxima != 250 ||
+            elite.habilidades[0].dano_min != 43 ||
+            elite.habilidades[0].dano_max != 62 ||
+            elite.estamina_maxima != 8 || calcularAcoesPorTurno(&elite) != 3) {
+            fprintf(stderr, "Falha sanitaria: elite deve ter +25%% vida/dano, +3 estamina e 3 acoes.\n");
+            return false;
+        }
+    }
+    {
+        Tabuleiro3x6 mapaDescanso;
+        Combatente descansando;
+        Combatente atacante;
+        (void)memset(&mapaDescanso, 0, sizeof(mapaDescanso));
+        (void)criarPirataInicial(CLASSE_BUCANEIRO, &descansando);
+        (void)criarInimigoInicial(INIMIGO_GRUNT_ESPADA, &atacante);
+        descansando.linha = 1;
+        descansando.coluna = 1;
+        descansando.estamina_atual = 0;
+        atacante.linha = 1;
+        atacante.coluna = 2;
+        atacante.habilidades[0].dano_min = 40;
+        atacante.habilidades[0].dano_max = 40;
+        atacante.habilidades[0].precisao = 100;
+        mapaDescanso.celulas[1][1] = &descansando;
+        mapaDescanso.celulas[1][2] = &atacante;
+        iniciarDescanso(&mapaDescanso, &descansando);
+        executarAtaqueOuHabilidade(&mapaDescanso, &atacante, 0, 1, 1);
+        if (!descansando.atacado_no_descanso ||
+            descansando.vida_atual != descansando.vida_maxima - 50) {
+            fprintf(stderr, "Falha sanitaria: descansar mantém vulnerabilidade a dano.\n");
+            return false;
+        }
+        processarStatusInicioTurno(&mapaDescanso, &descansando);
+        if (descansando.estamina_atual != descansando.estamina_maxima) {
+            fprintf(stderr, "Falha sanitaria: descanso recupera toda a estamina após ataque.\n");
+            return false;
+        }
+    }
+    {
+        Tabuleiro3x6 mapaChefe;
+        Combatente bucaneiroChefe;
+        Combatente chefe;
+        (void)memset(&mapaChefe, 0, sizeof(mapaChefe));
+        (void)criarPirataInicial(CLASSE_BUCANEIRO, &bucaneiroChefe);
+        (void)subirNivelPirata(&bucaneiroChefe, 5);
+        (void)criarChefeFinal(&chefe);
+        bucaneiroChefe.linha = 1;
+        bucaneiroChefe.coluna = 1;
+        bucaneiroChefe.estamina_atual = 10;
+        chefe.linha = 1;
+        chefe.coluna = 2;
+        mapaChefe.celulas[1][1] = &bucaneiroChefe;
+        mapaChefe.celulas[1][2] = &chefe;
+        executarAtaqueOuHabilidade(&mapaChefe, &bucaneiroChefe, 1, 1, 2);
+        executarAtaqueOuHabilidade(&mapaChefe, &bucaneiroChefe, 1, 1, 2);
+        if (!mapaChefe.boss_atordoado_nesta_rodada ||
+            chefe.turnos_atordoado != 1) {
+            fprintf(stderr, "Falha sanitaria: Bucaneiro só atordoa Barba Negra uma vez por rodada.\n");
+            return false;
+        }
+        (void)memset(&mapaChefe, 0, sizeof(mapaChefe));
+        chefe.linha = 1;
+        chefe.coluna = 3;
+        chefe.estamina_atual = 2;
+        mapaChefe.celulas[1][3] = &chefe;
+        if (!moverCombatente3x6(&mapaChefe, &chefe, 1, 5) ||
+            chefe.coluna != 5 || chefe.estamina_atual != 1) {
+            fprintf(stderr, "Falha sanitaria: Barba Negra pode mover duas casas por ação.\n");
+            return false;
+        }
+    }
     return true;
 }
 
@@ -863,8 +976,9 @@ static bool executarTestesSanitarios(void)
     boss.vida_atual = boss.vida_maxima;
     boss.vivo = true;
     boss.linha = 1;
-    boss.coluna = 3;
-    mapa.celulas[1][3] = &boss;
+    boss.coluna = COLUNAS_TABULEIRO - 1;
+    boss.etapa_rota = 3;
+    mapa.celulas[1][COLUNAS_TABULEIRO - 1] = &boss;
     subtrairVida(&mapa, &boss, boss.vida_maxima / 2);
     if (!mapa.boss_fase_2_ativa || boss.fase_boss != 2 ||
         boss.estamina_maxima != 30 || boss.estamina_atual != 30) {
@@ -873,6 +987,7 @@ static bool executarTestesSanitarios(void)
     }
     {
         int grunts = 0;
+        bool gruntsEscalados = true;
         int linha;
         int coluna;
         for (linha = 0; linha < LINHAS_TABULEIRO; linha++) {
@@ -881,11 +996,15 @@ static bool executarTestesSanitarios(void)
                 if (unidade != NULL && !unidade->aliado &&
                     unidade->tipo_inimigo == INIMIGO_GRUNT_ESPADA) {
                     grunts++;
+                    if (unidade->etapa_rota != 3 || unidade->vida_maxima < 312 ||
+                        unidade->estamina_maxima != 9) {
+                        gruntsEscalados = false;
+                    }
                 }
             }
         }
-        if (grunts != 2) {
-            fprintf(stderr, "Falha sanitaria: invocacao de grunts na fase dois.\n");
+        if (grunts != 2 || !gruntsEscalados) {
+            fprintf(stderr, "Falha sanitaria: grunts da fase dois devem escalar com a rota.\n");
             goto limpeza;
         }
     }

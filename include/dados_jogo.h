@@ -34,6 +34,7 @@ void escalonarInimigoPorDificuldade(Combatente *inimigo, int nivelDificuldade);
 // Aplica os modificadores multiplicativos de uma rota e histórico de run.
 void escalonarInimigoPorRota(Combatente *inimigo, TipoNoRota tipoRota, int etapa,
                              int fugasNaRun, bool saqueouLoja);
+void aplicarBuffElite(Combatente *inimigo);
 // Gera inimigos determinísticos para a rota e retorna quantos foram criados.
 int sortearInimigosRota(TipoNoRota tipoRota, unsigned int semente,
                         int indices[], int capacidade);

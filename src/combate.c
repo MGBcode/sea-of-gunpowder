@@ -244,6 +244,13 @@ static void invocarGruntProximo(Tabuleiro3x6 *mapa, Combatente *grunt,
         grunt->linha = melhorLinha;
         grunt->coluna = melhorColuna;
         mapa->celulas[melhorLinha][melhorColuna] = grunt;
+        if (mapa->celulas[1][COLUNAS_TABULEIRO - 1] != NULL &&
+            mapa->celulas[1][COLUNAS_TABULEIRO - 1]->eh_boss) {
+            Combatente *chefe = mapa->celulas[1][COLUNAS_TABULEIRO - 1];
+            grunt->etapa_rota = chefe->etapa_rota;
+            escalonarInimigoPorRota(grunt, ROTA_CHEFE, grunt->etapa_rota,
+                                     contadorFugas, contadorSaques > 0);
+        }
     } else {
         grunt->vivo = false;
     }
@@ -351,7 +358,8 @@ bool moverCombatente3x6(Tabuleiro3x6 *mapa, Combatente *unidade, int destinoLinh
         return false;
     }
     distancia = distanciaEntre(destinoLinha, destinoColuna, unidade->linha, unidade->coluna);
-    passoMaximo = (unidade->aliado && unidade->classe == CLASSE_BUCANEIRO) ? 2 : 1;
+    passoMaximo = (unidade->eh_boss ||
+                   (unidade->aliado && unidade->classe == CLASSE_BUCANEIRO)) ? 2 : 1;
     for (item = unidade->build_passivos.inicio; item != NULL; item = item->proximo) {
         if (item->item.id == 8) {
             passoMaximo++;
@@ -381,9 +389,6 @@ bool moverCombatente3x6(Tabuleiro3x6 *mapa, Combatente *unidade, int destinoLinh
     }
     if (bossFaseDois && unidade->vivo) {
         mapa->turnos_boss_fase_2++;
-        if (mapa->turnos_boss_fase_2 % 2 == 0) {
-            mapa->mina_ativa[linhaAnterior][colunaAnterior] = 1;
-        }
     }
     return true;
 }
@@ -500,6 +505,11 @@ static int calcularPrecisaoFinal(const Combatente *atacante, const Habilidade *h
     if (atacante->turnos_motivacao > 0 || atacante->motivado_capitao ||
         atacante == motivadoAtivoNesteTurno) {
         precisao += 40;
+    }
+    if (atacante->aliado && indiceHab == 2 &&
+        (atacante->classe == CLASSE_BUCANEIRO ||
+         atacante->classe == CLASSE_TIMONEIRO)) {
+        return 100;
     }
     if (precisao < 0) {
         precisao = 0;
@@ -726,11 +736,14 @@ static void aplicarEfeito(Tabuleiro3x6 *mapa, Combatente *atacante, Combatente *
                           const Habilidade *habilidade, int indiceHabilidade,
                           int dirAxialLinha, int dirAxialColuna)
 {
-    (void)mapa;
-    (void)indiceHabilidade;
     (void)dirAxialLinha;
     (void)dirAxialColuna;
     if (alvo == NULL || !alvo->vivo) {
+        return;
+    }
+    if (atacante->aliado && atacante->classe == CLASSE_COZINHEIRO &&
+        indiceHabilidade == 0 && alvo->aliado != atacante->aliado) {
+        alvo->turnos_veneno = 2;
         return;
     }
     if (habilidade->efeito == EFEITO_MOTIVACAO) {
@@ -745,6 +758,13 @@ static void aplicarEfeito(Tabuleiro3x6 *mapa, Combatente *atacante, Combatente *
             alvo->turnos_desmoralizado = 2;
         }
     } else if (habilidade->efeito == EFEITO_ESTUNAR) {
+        if (alvo->eh_boss && atacante->aliado &&
+            atacante->classe == CLASSE_BUCANEIRO) {
+            if (mapa == NULL || mapa->boss_atordoado_nesta_rodada) {
+                return;
+            }
+            mapa->boss_atordoado_nesta_rodada = true;
+        }
         alvo->turnos_atordoado = habilidade->duracao_efeito > 0 ?
                                   habilidade->duracao_efeito : 1;
     } else if (habilidade->efeito == EFEITO_SANGRAMENTO) {
@@ -974,12 +994,15 @@ void executarAtaqueOuHabilidade(Tabuleiro3x6 *mapa, Combatente *atacante, int in
     bool area;
     bool clicouEmMina;
     bool temKnockback;
+    bool cozinheiroEnvenena;
     if (mapa == NULL || atacante == NULL || !atacante->vivo ||
         indiceHab < 0 || indiceHab >= atacante->habilidades_desbloqueadas ||
         indiceHab >= MAX_HABILIDADES || !coordenadaValida(alvoLinha, alvoColuna)) {
         return;
     }
     habilidade = &atacante->habilidades[indiceHab];
+    cozinheiroEnvenena = atacante->aliado && atacante->classe == CLASSE_COZINHEIRO &&
+                         indiceHab == 0;
     distancia = distanciaEntre(atacante->linha, atacante->coluna, alvoLinha, alvoColuna);
     if (!ataqueValido(atacante, habilidade, alvoLinha, alvoColuna, distancia) ||
         !caminhoAtaqueLivre(mapa, atacante, habilidade, alvoLinha, alvoColuna)) {
@@ -994,7 +1017,10 @@ void executarAtaqueOuHabilidade(Tabuleiro3x6 *mapa, Combatente *atacante, int in
     }
     alvoClique = mapa->celulas[alvoLinha][alvoColuna];
     clicouEmMina = mapa->mina_ativa[alvoLinha][alvoColuna] > 0;
-    if (habilidade->efeito == EFEITO_CURA &&
+    if (cozinheiroEnvenena && (alvoClique == NULL || !alvoClique->vivo)) {
+        return;
+    }
+    if (habilidade->efeito == EFEITO_CURA && !cozinheiroEnvenena &&
         habilidade->tipo_ataque != ATAQUE_AREA_2X3 &&
         (alvoClique == NULL || alvoClique->aliado != atacante->aliado)) {
         return;
@@ -1011,7 +1037,8 @@ void executarAtaqueOuHabilidade(Tabuleiro3x6 *mapa, Combatente *atacante, int in
         habilidade->tipo_ataque != ATAQUE_LINHA &&
         habilidade->tipo_ataque != ATAQUE_DASH_CARDEAL &&
         !clicouEmMina &&
-        (alvoClique == NULL || alvoClique->aliado == atacante->aliado)) {
+        (alvoClique == NULL || (alvoClique->aliado == atacante->aliado &&
+                                !cozinheiroEnvenena))) {
         return;
     }
     (void)memset(mapa->ultimo_dano_celula, 0, sizeof(mapa->ultimo_dano_celula));
@@ -1140,12 +1167,13 @@ void executarAtaqueOuHabilidade(Tabuleiro3x6 *mapa, Combatente *atacante, int in
                 habilidade->efeito != EFEITO_VENENO) {
                 continue;
             }
-            if (habilidade->efeito == EFEITO_CURA ||
+            if ((habilidade->efeito == EFEITO_CURA && !cozinheiroEnvenena) ||
                 habilidade->efeito == EFEITO_CURA_CONTINUA) {
                 if (alvoCelula->aliado != atacante->aliado) {
                     continue;
                 }
-            } else if (alvoCelula->aliado == atacante->aliado && !habilidade->fogo_amigo &&
+            } else if (!cozinheiroEnvenena &&
+                       alvoCelula->aliado == atacante->aliado && !habilidade->fogo_amigo &&
                        habilidade->efeito != EFEITO_MOTIVACAO &&
                        habilidade->efeito != EFEITO_VENENO) {
                 continue;
@@ -1220,6 +1248,9 @@ int calcularAcoesPorTurno(const Combatente *unidade)
         (unidade->passiva_aprimorada || unidade->nivel >= 4)) {
         acoes += 1;
     }
+    if (!unidade->aliado && unidade->eh_elite) {
+        acoes += 1;
+    }
     for (item = unidade->build_passivos.inicio; item != NULL; item = item->proximo) {
         if (item->item.bonus_acoes_basicas > 0) {
             acoes += item->item.bonus_acoes_basicas *
@@ -1254,13 +1285,7 @@ void processarStatusInicioTurno(Tabuleiro3x6 *mapa, Combatente *unidade)
     unidade->turno_perdido = false;
     unidade->usou_consumivel_gratis_turno = false;
     if (unidade->em_descanso) {
-        if (unidade->eh_boss) {
-            unidade->estamina_atual = unidade->estamina_maxima;
-        } else if (unidade->atacado_no_descanso) {
-            unidade->estamina_atual += unidade->estamina_maxima / 2;
-        } else {
-            unidade->estamina_atual = unidade->estamina_maxima;
-        }
+        unidade->estamina_atual = unidade->estamina_maxima;
         if (unidade->estamina_atual > unidade->estamina_maxima) {
             unidade->estamina_atual = unidade->estamina_maxima;
         }

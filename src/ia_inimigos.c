@@ -352,7 +352,9 @@ bool selecionarAcaoIA(Tabuleiro3x6 *mapa, Combatente *inimigo, CandidatoAcao *es
                 int distanciaNova;
                 int pontuacao;
                 bool alinhaTiro;
-                if (passoDist != 1 || mapa->celulas[linha][coluna] != NULL ||
+                if (passoDist < 1 ||
+                    passoDist > (inimigo->eh_boss ? 2 : 1) ||
+                    mapa->celulas[linha][coluna] != NULL ||
                     mapa->mina_ativa[linha][coluna] > 0) {
                     continue;
                 }

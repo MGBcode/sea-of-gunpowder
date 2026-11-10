@@ -101,7 +101,7 @@ bool criarPirataInicial(int indice, Combatente *destino)
                           EFEITO_SANGRAMENTO, ATAQUE_MELEE);
         definirHabilidade(&destino->habilidades[1], "Bolsa de Areia", 0, 0, 90, 1, 4,
                           EFEITO_ESTUNAR, ATAQUE_AREA_1X3);
-        definirHabilidade(&destino->habilidades[2], "Avanço Impetuoso", 120, 150, 90, 2, 6,
+        definirHabilidade(&destino->habilidades[2], "Avanço Impetuoso", 120, 150, 100, 2, 6,
                           EFEITO_DANO, ATAQUE_DASH_CARDEAL);
         destino->habilidades[0].duracao_efeito = 2;
         destino->habilidades[1].duracao_efeito = 1;
@@ -113,7 +113,7 @@ bool criarPirataInicial(int indice, Combatente *destino)
                           EFEITO_DANO, ATAQUE_MELEE);
         definirHabilidade(&destino->habilidades[1], "Esmagar", 90, 120, 60, 1, 3,
                           EFEITO_ESTUNAR, ATAQUE_MELEE);
-        definirHabilidade(&destino->habilidades[2], "Giro do Timão", 50, 85, 60, 1, 4,
+        definirHabilidade(&destino->habilidades[2], "Giro do Timão", 50, 85, 100, 1, 4,
                           EFEITO_DESNORTEAR, ATAQUE_AREA_1X3);
         destino->habilidades[1].duracao_efeito = 1;
         destino->habilidades[2].duracao_efeito = 2;
@@ -252,7 +252,7 @@ int carregarItensIniciais(Item itens[], int capacidade)
     return total;
 }
 
-// Evolui níveis aplicando ganho de +20% de vida e +20% de dano de ataque por nível.
+// Após o nível 6, os ganhos de vida e dano passam a 5% por nível.
 bool subirNivelPirata(Combatente *unidade, int niveisGanhos)
 {
     int passo;
@@ -271,11 +271,13 @@ bool subirNivelPirata(Combatente *unidade, int niveisGanhos)
         int indiceTabela;
         int estaminaNova;
         int estaminaBonus;
-        aumentoVida = (unidade->vida_maxima * 20) / 100;
+        int percentual;
+        nivelNovo = unidade->nivel + 1;
+        percentual = nivelNovo <= 6 ? 20 : 5;
+        aumentoVida = (unidade->vida_maxima * percentual) / 100;
         if (aumentoVida < 1) {
             aumentoVida = 1;
         }
-        nivelNovo = unidade->nivel + 1;
         indiceTabela = nivelNovo - 1;
         estaminaNova = nivelNovo <= 6 ?
                        unidade->estamina_por_nivel[indiceTabela] + bonusColar :
@@ -286,17 +288,24 @@ bool subirNivelPirata(Combatente *unidade, int niveisGanhos)
         if (unidade->vida_atual > unidade->vida_maxima) {
             unidade->vida_atual = unidade->vida_maxima;
         }
-        unidade->dano_base += 20;
+        if (percentual == 20) {
+            unidade->dano_base += 20;
+        } else if (unidade->dano_base > 0) {
+            int aumentoDanoBase = (unidade->dano_base * percentual) / 100;
+            unidade->dano_base += aumentoDanoBase > 0 ? aumentoDanoBase : 1;
+        }
         for (habIndice = 0; habIndice < MAX_HABILIDADES; habIndice++) {
             if (unidade->habilidades[habIndice].efeito != EFEITO_CURA &&
                 unidade->habilidades[habIndice].efeito != EFEITO_CURA_CONTINUA) {
                 if (unidade->habilidades[habIndice].dano_min > 0) {
-                    unidade->habilidades[habIndice].dano_min +=
-                        (unidade->habilidades[habIndice].dano_min * 20) / 100;
+                    int aumento = (unidade->habilidades[habIndice].dano_min *
+                                   percentual) / 100;
+                    unidade->habilidades[habIndice].dano_min += aumento;
                 }
                 if (unidade->habilidades[habIndice].dano_max > 0) {
-                    unidade->habilidades[habIndice].dano_max +=
-                        (unidade->habilidades[habIndice].dano_max * 20) / 100;
+                    int aumento = (unidade->habilidades[habIndice].dano_max *
+                                   percentual) / 100;
+                    unidade->habilidades[habIndice].dano_max += aumento;
                 }
             }
         }
@@ -507,6 +516,18 @@ static void aplicarMultiplicadorInimigo(Combatente *inimigo, int fator)
                 (inimigo->habilidades[indice].dano_max * fator) / 100;
         }
     }
+}
+
+// Marca e fortalece um inimigo de elite sem alterar sua classe ou habilidades.
+void aplicarBuffElite(Combatente *inimigo)
+{
+    if (inimigo == NULL || inimigo->eh_elite) {
+        return;
+    }
+    inimigo->eh_elite = true;
+    aplicarMultiplicadorInimigo(inimigo, 125);
+    inimigo->estamina_maxima += 3;
+    inimigo->estamina_atual += 3;
 }
 
 // Aplica o multiplicador de dificuldade da run.

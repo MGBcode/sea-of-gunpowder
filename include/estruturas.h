@@ -150,7 +150,9 @@ typedef struct Combatente {
     bool aliado;
     bool vivo;
     bool eh_boss;
+    bool eh_elite;
     int fase_boss;
+    int etapa_rota;
     ClassePirata classe;
     TipoInimigo tipo_inimigo;
     bool em_descanso;
@@ -186,6 +188,7 @@ typedef struct {
     int ultima_cura_celula[LINHAS_TABULEIRO][COLUNAS_TABULEIRO];
     bool boss_fase_2_ativa;
     int turnos_boss_fase_2;
+    bool boss_atordoado_nesta_rodada;
 } Tabuleiro3x6;
 
 typedef struct NoCelula {
