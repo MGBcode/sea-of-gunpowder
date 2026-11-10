@@ -52,3 +52,11 @@ make clean
 - **Botão Esquerdo do Mouse**: Seleciona piratas, escolhe rotas, posiciona unidades nas colunas 0 e 1 na fase pré-combate, usa habilidades e gerencia itens na Loja e na Mochila.
 - **Scroll do Mouse (Roda do Mouse)**: Rola os textos de descrição na janela de **Detalhes** do personagem e a lista de itens na **Mochila**.
 - **Tecla `ESC`**: Abre ou fecha o menu de **Pause** (*Retornar* ou *Voltar ao Menu*).
+
+## Personalização Visual (Opcional)
+As texturas abaixo são carregadas de `assets/textures/` quando presentes. Se uma textura de UI não existir, os painéis, molduras e botões usam primitivas Raylib. Os fundos de combate aceitam até cinco arquivos (`bg_combate_1.png` a `bg_combate_5.png`); sem nenhum deles, `bg_navio.png` é usado como pool. O chefe pode usar `bg_boss.png`; se ausente, o fundo da batalha é `DARKBLUE`.
+
+- `tex_btn_padrao.png`
+- `tex_frame_retrato.png`
+- `tex_painel_detalhes.png`
+- `tex_painel_mochila.png`

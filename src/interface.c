@@ -125,7 +125,13 @@ static void desenharFundoEstado(const InterfaceJogo *interfaceJogo)
         return;
     }
     if (interfaceJogo->estado == TELA_COMBATE_3X6) {
-        textura = interfaceJogo->bgNavio;
+        if (interfaceJogo->bgBossAtivo) {
+            textura = interfaceJogo->bgBoss;
+        } else if (interfaceJogo->bgCombateAtualIdx >= 0 &&
+                   interfaceJogo->bgCombateAtualIdx < interfaceJogo->qtdBgCombate &&
+                   interfaceJogo->bgCombateAtualIdx < 5) {
+            textura = interfaceJogo->bgCombatePool[interfaceJogo->bgCombateAtualIdx];
+        }
     } else {
         textura = interfaceJogo->bgMar;
     }
@@ -143,9 +149,29 @@ static void desenharFundoEstado(const InterfaceJogo *interfaceJogo)
                    0.0f, WHITE);
 }
 
+static Texture2D obterTexturaFundoCombate(const InterfaceJogo *interfaceJogo)
+{
+    if (interfaceJogo == NULL) {
+        return (Texture2D){ 0 };
+    }
+    if (interfaceJogo->bgBossAtivo) {
+        return interfaceJogo->bgBoss;
+    }
+    if (interfaceJogo->bgCombateAtualIdx >= 0 &&
+        interfaceJogo->bgCombateAtualIdx < interfaceJogo->qtdBgCombate &&
+        interfaceJogo->bgCombateAtualIdx < 5) {
+        return interfaceJogo->bgCombatePool[interfaceJogo->bgCombateAtualIdx];
+    }
+    return (Texture2D){ 0 };
+}
+
 // Inicia o quadro e aplica o fundo apropriado ao estado da interface.
 static void iniciarQuadroVirtual(const InterfaceJogo *interfaceJogo, Color corFundo)
 {
+    if (interfaceJogo != NULL && interfaceJogo->estado == TELA_COMBATE_3X6 &&
+        obterTexturaFundoCombate(interfaceJogo).id == 0) {
+        corFundo = DARKBLUE;
+    }
     if (canvasCarregado && canvasVirtual.id != 0) {
         BeginTextureMode(canvasVirtual);
         ClearBackground(corFundo);
@@ -188,6 +214,66 @@ static Font obterFonteInterface(void)
         return interfaceRenderizada->fonteJogo;
     }
     return GetFontDefault();
+}
+
+static Rectangle converterBoundsVirtual(Rectangle bounds)
+{
+    return (Rectangle){ bounds.x * 1.5f, bounds.y * 1.5f,
+                        bounds.width * 1.5f, bounds.height * 1.5f };
+}
+
+static void desenharTexturaBounds(Texture2D textura, Rectangle bounds)
+{
+    Rectangle origem;
+    if (textura.id == 0 || textura.width <= 0 || textura.height <= 0) {
+        return;
+    }
+    origem = (Rectangle){ 0.0f, 0.0f, (float)textura.width, (float)textura.height };
+    DrawTexturePro(textura, origem, converterBoundsVirtual(bounds),
+                   (Vector2){ 0.0f, 0.0f }, 0.0f, WHITE);
+}
+
+void DrawUIButtonCustom(Rectangle bounds, const char *text, Texture2D texBotao, Font font)
+{
+    Rectangle boundsRender = converterBoundsVirtual(bounds);
+    if (texBotao.id != 0) {
+        desenharTexturaBounds(texBotao, bounds);
+    } else {
+        DrawRectangleRec(boundsRender, (Color){ 42, 63, 76, 255 });
+        DrawRectangleLinesEx(bounds, 2.0f, (Color){ 125, 153, 170, 255 });
+    }
+    if (text != NULL) {
+        Vector2 tamanhoTexto;
+        float tamanhoFonte = bounds.height * 0.34f;
+        if (font.texture.id == 0) {
+            font = GetFontDefault();
+        }
+        tamanhoTexto = MeasureTextEx(font, text, tamanhoFonte, 0.0f);
+        DrawTextEx(font, text,
+                   (Vector2){ boundsRender.x + (boundsRender.width - tamanhoTexto.x * 1.5f) / 2.0f,
+                              boundsRender.y + (boundsRender.height - tamanhoTexto.y * 1.5f) / 2.0f },
+                   tamanhoFonte * 1.5f, 0.0f, RAYWHITE);
+    }
+}
+
+void DrawUIPanelCustom(Rectangle bounds, Texture2D texPainel, Color colorFallback)
+{
+    Rectangle boundsRender = converterBoundsVirtual(bounds);
+    if (texPainel.id != 0) {
+        desenharTexturaBounds(texPainel, bounds);
+    } else {
+        DrawRectangleRec(boundsRender, colorFallback);
+        DrawRectangleLinesEx(bounds, 1.5f, (Color){ 90, 110, 125, 210 });
+    }
+}
+
+void DrawUIFrameCustom(Rectangle bounds, Texture2D texBorda)
+{
+    if (texBorda.id != 0) {
+        desenharTexturaBounds(texBorda, bounds);
+    } else {
+        DrawRectangleLinesEx(bounds, 2.0f, GOLD);
+    }
 }
 
 void desenharTextoGlobal(const char *texto, Vector2 pos, float tamanho, Color cor)
@@ -443,28 +529,18 @@ static Combatente *obterAtorClicadoNaFila(const InterfaceJogo *interfaceJogo, Ve
 {
     int indice;
     int slotVisivel = 0;
-    int totalVivos = 0;
-    int larguraCard;
-    int passoCard;
     if (interfaceJogo == NULL) {
         return NULL;
     }
-    for (indice = 0; indice < interfaceJogo->total_iniciativa; indice++) {
-        Combatente *ator = interfaceJogo->fila_iniciativa[indice].ator;
-        if (ator != NULL && ator->vivo) {
-            totalVivos++;
-        }
-    }
-    larguraCard = totalVivos > 8 ? 114 : 138;
-    passoCard = larguraCard + 5;
     for (indice = 0; indice < interfaceJogo->total_iniciativa && slotVisivel < 9; indice++) {
         Combatente *ator = interfaceJogo->fila_iniciativa[indice].ator;
-        int posCardX = 136 + slotVisivel * passoCard;
+        int posCardX;
         if (ator == NULL || !ator->vivo) {
             continue;
         }
-        if (retanguloClicado((Rectangle){ (float)posCardX, 6.0f,
-                                          (float)larguraCard, 32.0f }, mouse)) {
+        posCardX = LARGURA_VIRTUAL - 16 - (slotVisivel + 1) * 50;
+        if (retanguloClicado((Rectangle){ (float)posCardX, 7.0f, 45.0f, 45.0f },
+                             mouse)) {
             return ator;
         }
         slotVisivel++;
@@ -652,6 +728,15 @@ static void iniciarEncontro(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
     int etapaAtual;
     if (interfaceJogo->rota_atual == NULL || *interfaceJogo->rota_atual == NULL) {
         return;
+    }
+    interfaceJogo->bgBossAtivo = (*interfaceJogo->rota_atual)->tipo == ROTA_CHEFE;
+    if (interfaceJogo->bgBossAtivo) {
+        interfaceJogo->bgCombateAtualIdx = -1;
+    } else if (interfaceJogo->qtdBgCombate > 0) {
+        interfaceJogo->bgCombateAtualIdx =
+            GetRandomValue(0, interfaceJogo->qtdBgCombate - 1);
+    } else {
+        interfaceJogo->bgCombateAtualIdx = -1;
     }
     limparMapa(mapa);
     posicionarTripulacao(interfaceJogo, mapa, piratas, totalPiratas);
@@ -1157,6 +1242,8 @@ static void reiniciarPartidaCompleta(InterfaceJogo *interfaceJogo, Tabuleiro3x6 
     interfaceJogo->indice_compra_pendente = -1;
     interfaceJogo->item_id_selecionado = 0;
     interfaceJogo->fase_pre_combate_ativa = false;
+    interfaceJogo->bgBossAtivo = false;
+    interfaceJogo->bgCombateAtualIdx = -1;
     interfaceJogo->saque_em_andamento = false;
     interfaceJogo->loja_aberta_pendente = false;
     interfaceJogo->total_itens_loja =
@@ -1165,13 +1252,30 @@ static void reiniciarPartidaCompleta(InterfaceJogo *interfaceJogo, Tabuleiro3x6 
     interfaceJogo->estado = TELA_SELECAO_TRIPULACAO;
 }
 
+static Texture2D carregarTexturaOpcional(const char *caminho)
+{
+    Texture2D textura = { 0 };
+    if (caminho != NULL && FileExists(caminho)) {
+        textura = LoadTexture(caminho);
+        if (textura.id == 0) {
+            TraceLog(LOG_WARNING, "Nao foi possivel carregar a textura opcional %s.",
+                     caminho);
+        } else {
+            SetTextureFilter(textura, TEXTURE_FILTER_BILINEAR);
+        }
+    }
+    return textura;
+}
+
 // Inicializa a janela em 1920x1080 (1080p), o framebuffer 1080p e a fonte TrueType de alta nitidez.
 void inicializarInterface(InterfaceJogo *interfaceJogo)
 {
     int codepoints[224];
     int indice;
+    int fundosCarregados = 0;
     const char *diretorioWindows;
     char caminhoFonte[512];
+    char caminhoTextura[128];
     if (interfaceJogo == NULL) {
         return;
     }
@@ -1184,11 +1288,12 @@ void inicializarInterface(InterfaceJogo *interfaceJogo)
     interfaceJogo->linha_destaque_acao = -1;
     interfaceJogo->coluna_destaque_acao = -1;
     interfaceJogo->linha_origem_acao = -1;
+    interfaceJogo->bgCombateAtualIdx = -1;
     interfaceJogo->coluna_origem_acao = -1;
     interfaceJogo->largura_celula = 180;
-    interfaceJogo->altura_celula = 148;
+    interfaceJogo->altura_celula = 135;
     interfaceJogo->margem_esquerda = 100;
-    interfaceJogo->margem_superior = 130;
+    interfaceJogo->margem_superior = 155;
     interfaceJogo->pirata_posicionando_indice = -1;
     interfaceJogo->indice_iniciativa = -1;
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT);
@@ -1226,6 +1331,29 @@ void inicializarInterface(InterfaceJogo *interfaceJogo)
     } else {
         TraceLog(LOG_ERROR, "Arquivo assets/textures/bg_navio.png nao encontrado.");
     }
+    for (indice = 0; indice < 5; indice++) {
+        (void)snprintf(caminhoTextura, sizeof(caminhoTextura),
+                       "assets/textures/bg_combate_%d.png", indice + 1);
+        interfaceJogo->bgCombatePool[fundosCarregados] =
+            carregarTexturaOpcional(caminhoTextura);
+        if (interfaceJogo->bgCombatePool[fundosCarregados].id != 0) {
+            fundosCarregados++;
+        }
+    }
+    if (fundosCarregados == 0 && interfaceJogo->bgNavio.id != 0) {
+        interfaceJogo->bgCombatePool[0] = interfaceJogo->bgNavio;
+        fundosCarregados = 1;
+    }
+    interfaceJogo->qtdBgCombate = fundosCarregados;
+    interfaceJogo->bgBoss = carregarTexturaOpcional("assets/textures/bg_boss.png");
+    interfaceJogo->texBtnPadrao =
+        carregarTexturaOpcional("assets/textures/tex_btn_padrao.png");
+    interfaceJogo->texFrameRetrato =
+        carregarTexturaOpcional("assets/textures/tex_frame_retrato.png");
+    interfaceJogo->texPainelDetalhes =
+        carregarTexturaOpcional("assets/textures/tex_painel_detalhes.png");
+    interfaceJogo->texPainelMochila =
+        carregarTexturaOpcional("assets/textures/tex_painel_mochila.png");
     diretorioWindows = getenv("WINDIR");
     if (diretorioWindows == NULL || diretorioWindows[0] == '\0') {
         diretorioWindows = getenv("SystemRoot");
@@ -2372,7 +2500,8 @@ static void desenharDetalhes(const InterfaceJogo *interfaceJogo, const Combatent
         return;
     }
     offsetY = interfaceJogo->scroll_detalhes;
-    DrawRectangle(160, 50, 740, 555, (Color){ 12, 19, 27, 252 });
+    DrawUIPanelCustom((Rectangle){ 160.0f, 50.0f, 740.0f, 555.0f },
+                      interfaceJogo->texPainelDetalhes, (Color){ 12, 19, 27, 252 });
     posY = 116 - offsetY;
     if (posY >= minY && posY + 24 <= maxY) {
         desenharTexto(unidade->nome, 185, posY, 23, unidade->aliado ? SKYBLUE : ORANGE);
@@ -2448,8 +2577,13 @@ static void desenharDetalhes(const InterfaceJogo *interfaceJogo, const Combatent
         }
         formatarCabecalhoHabilidade(unidade, indice, false, cabecalho, sizeof(cabecalho));
         if (posY + alturaCard >= minY && posY <= maxY) {
-            DrawRectangle(185, posY, 680, alturaCard, (Color){ 20, 32, 44, 255 });
-            DrawRectangleLines(185, posY, 680, alturaCard, desbloqueada ? SKYBLUE : DARKGRAY);
+            DrawUIPanelCustom((Rectangle){ 185.0f, (float)posY, 680.0f,
+                                           (float)alturaCard },
+                              interfaceJogo->texPainelDetalhes,
+                              (Color){ 20, 32, 44, 255 });
+            if (!desbloqueada) {
+                DrawRectangleLines(185, posY, 680, alturaCard, DARKGRAY);
+            }
         }
         if (posY + 4 >= minY && posY + 18 <= maxY) {
             desenharTexto(cabecalho, 193, posY + 4, 13, desbloqueada ? RAYWHITE : GRAY);
@@ -2489,11 +2623,12 @@ static void desenharDetalhes(const InterfaceJogo *interfaceJogo, const Combatent
     }
     DrawRectangle(161, 51, 738, 60, (Color){ 12, 19, 27, 255 });
     DrawRectangle(161, 589, 738, 15, (Color){ 12, 19, 27, 255 });
-    DrawRectangleLines(160, 50, 740, 555, GOLD);
+    DrawUIFrameCustom((Rectangle){ 160.0f, 50.0f, 740.0f, 555.0f },
+                      interfaceJogo->texFrameRetrato);
     desenharTexto("FICHA DE INSPEÇÃO DO PERSONAGEM", 185, 68, 21, GOLD);
     desenharTexto("Role com o Scroll do Mouse", 535, 74, 14, LIGHTGRAY);
-    DrawRectangle(760, 68, 85, 38, (Color){ 60, 75, 87, 255 });
-    desenharTexto("FECHAR", 772, 80, 14, RAYWHITE);
+    DrawUIButtonCustom((Rectangle){ 760.0f, 68.0f, 85.0f, 38.0f },
+                       "FECHAR", interfaceJogo->texBtnPadrao, obterFonteInterface());
     DrawRectangle(880, 115, 8, 472, (Color){ 28, 40, 52, 255 });
     barraY = 115 + (offsetY * 392) / 420;
     DrawRectangle(880, barraY, 8, 80, GOLD);
@@ -2581,13 +2716,15 @@ static void desenharMochila(const InterfaceJogo *interfaceJogo)
     const Combatente *selecionado = interfaceJogo->entidade_selecionada;
     bool somenteConsumiveis = interfaceJogo->estado == TELA_COMBATE_3X6 &&
                               !interfaceJogo->fase_pre_combate_ativa;
-    DrawRectangle(160, 50, 700, 555, (Color){ 12, 19, 27, 252 });
-    DrawRectangleLines(160, 50, 700, 555, GOLD);
+    DrawUIPanelCustom((Rectangle){ 160.0f, 50.0f, 700.0f, 555.0f },
+                      interfaceJogo->texPainelMochila, (Color){ 12, 19, 27, 252 });
+    DrawUIFrameCustom((Rectangle){ 160.0f, 50.0f, 700.0f, 555.0f },
+                      interfaceJogo->texFrameRetrato);
     desenharTexto("MOCHILA DA TRIPULAÇÃO E BUILDS PASSIVAS", 180, 68, 20, GOLD);
     desenharTexto("Scroll: rolar itens", 595, 73, 13, LIGHTGRAY);
-    DrawRectangle(740, 68, 105, 38, (Color){ 60, 75, 87, 255 });
-    desenharTexto(interfaceJogo->loja_aberta_pendente ? "VOLTAR LOJA" : "FECHAR",
-                  interfaceJogo->loja_aberta_pendente ? 746 : 765, 80, 13, RAYWHITE);
+    DrawUIButtonCustom((Rectangle){ 740.0f, 68.0f, 105.0f, 38.0f },
+                       interfaceJogo->loja_aberta_pendente ? "VOLTAR LOJA" : "FECHAR",
+                       interfaceJogo->texBtnPadrao, obterFonteInterface());
     for (indice = 0; indice < interfaceJogo->total_selecionados; indice++) {
         int posAbaX = 180 + indice * 220;
         int idPirata = interfaceJogo->piratas_selecionados_ids[indice];
@@ -2619,9 +2756,10 @@ static void desenharMochila(const InterfaceJogo *interfaceJogo)
         posLinhaY = 178 + indice * 48 - interfaceJogo->scroll_mochila;
         if (posLinhaY >= 172 && posLinhaY <= 325) {
             bool selecionadoItem = item->item.id == interfaceJogo->item_id_selecionado;
-            DrawRectangle(180, posLinhaY, 650, 44,
-                          selecionadoItem ? (Color){ 48, 65, 78, 255 } :
-                                            (Color){ 26, 40, 52, 255 });
+            DrawUIPanelCustom((Rectangle){ 180.0f, (float)posLinhaY, 650.0f, 44.0f },
+                              interfaceJogo->texPainelMochila,
+                              selecionadoItem ? (Color){ 48, 65, 78, 255 } :
+                                                (Color){ 26, 40, 52, 255 });
             DrawRectangleLines(180, posLinhaY, 650, 44,
                                selecionadoItem ? GOLD : corRaridade);
             desenharTexto(TextFormat("[%s | %s] %s (x%d)",
@@ -2642,11 +2780,11 @@ static void desenharMochila(const InterfaceJogo *interfaceJogo)
         desenharTexto("Mochila vazia! Conquiste itens vencendo rotas ou comprando na Loja.",
                       205, 214, 15, LIGHTGRAY);
     }
-    DrawRectangle(690, 372, 135, 32,
-                  interfaceJogo->item_id_selecionado > 0 ?
-                  (Color){ 45, 125, 70, 255 } : (Color){ 55, 62, 68, 255 });
-    DrawRectangleLines(690, 372, 135, 32, GOLD);
-    desenharTexto("USAR", 730, 380, 15, RAYWHITE);
+    DrawUIButtonCustom((Rectangle){ 690.0f, 372.0f, 135.0f, 32.0f },
+                       "USAR", interfaceJogo->texBtnPadrao, obterFonteInterface());
+    if (interfaceJogo->item_id_selecionado > 0) {
+        DrawRectangleLines(690, 372, 135, 32, GOLD);
+    }
     {
         int maxScrollMochila = calcularMaxScrollMochila(interfaceJogo);
         int scrollAtual = interfaceJogo->scroll_mochila;
@@ -2858,37 +2996,85 @@ static void desenharFila(const InterfaceJogo *interfaceJogo)
 {
     int indice;
     int slotVisivel = 0;
-    int totalVivos = 0;
-    int larguraCard;
-    int passoCard;
-    for (indice = 0; indice < interfaceJogo->total_iniciativa; indice++) {
-        Combatente *ator = interfaceJogo->fila_iniciativa[indice].ator;
-        if (ator != NULL && ator->vivo) {
-            totalVivos++;
-        }
-    }
-    larguraCard = totalVivos > 8 ? 114 : 138;
-    passoCard = larguraCard + 5;
-    DrawRectangle(0, 0, LARGURA_VIRTUAL, 44, (Color){ 10, 17, 24, 240 });
-    desenharTexto("ORDEM DE TURNO:", 10, 14, 13, GOLD);
+    DrawRectangle(0, 0, LARGURA_VIRTUAL, 62, (Color){ 10, 17, 24, 230 });
     for (indice = 0; indice < interfaceJogo->total_iniciativa && slotVisivel < 9; indice++) {
         Combatente *ator = interfaceJogo->fila_iniciativa[indice].ator;
-        int posCardX = 136 + slotVisivel * passoCard;
+        int posCardX = LARGURA_VIRTUAL - 16 - (slotVisivel + 1) * 50;
         bool turnoAtivo = indice == interfaceJogo->indice_iniciativa;
         if (ator == NULL || !ator->vivo) {
             continue;
         }
-        DrawRectangle(posCardX, 6, larguraCard, 32, ator->aliado ?
+        DrawRectangle(posCardX, 7, 45, 45, ator->aliado ?
                       (Color){ 35, 75, 105, 255 } : (Color){ 115, 55, 40, 255 });
         if (turnoAtivo) {
-            DrawRectangleLinesEx((Rectangle){ (float)posCardX, 6.0f, (float)larguraCard, 32.0f },
-                                 2.5f, GOLD);
+            DrawRectangleLinesEx((Rectangle){ (float)posCardX, 7.0f, 45.0f, 45.0f },
+                                 3.0f, GOLD);
         } else {
-            DrawRectangleLines(posCardX, 6, larguraCard, 32, (Color){ 90, 110, 125, 180 });
+            DrawRectangleLines(posCardX, 7, 45, 45, (Color){ 90, 110, 125, 180 });
         }
-        desenharTexto(TextFormat("%dº %s", slotVisivel + 1, nomeCurtoIniciativa(ator)),
-                      posCardX + 6, 14, 12, turnoAtivo ? GOLD : RAYWHITE);
+        desenharTexto(TextFormat("%c", nomeCurtoIniciativa(ator)[0]),
+                      posCardX + 16, 18, 19, turnoAtivo ? GOLD : RAYWHITE);
         slotVisivel++;
+    }
+}
+
+static void desenharHUDAtorAtivo(const InterfaceJogo *interfaceJogo)
+{
+    const Combatente *ator;
+    Rectangle retrato = { 18.0f, 8.0f, 88.0f, 88.0f };
+    Rectangle barraHP = { 18.0f, 103.0f, 324.0f, 20.0f };
+    Rectangle barraEstamina = { 18.0f, 128.0f, 324.0f, 20.0f };
+    float proporcao;
+    Color corGrupo;
+    if (interfaceJogo == NULL) {
+        return;
+    }
+    ator = interfaceJogo->ator_atual;
+    if ((ator == NULL || !ator->vivo) && interfaceJogo->fase_pre_combate_ativa) {
+        ator = interfaceJogo->entidade_selecionada;
+    }
+    DrawUIPanelCustom((Rectangle){ 10.0f, 4.0f, 350.0f, 150.0f },
+                      interfaceJogo->texPainelDetalhes, (Color){ 12, 19, 27, 245 });
+    corGrupo = ator != NULL && !ator->aliado ?
+               (Color){ 135, 45, 38, 255 } : (Color){ 35, 75, 105, 255 };
+    DrawRectangleRec(converterBoundsVirtual(retrato), corGrupo);
+    DrawUIFrameCustom(retrato, interfaceJogo->texFrameRetrato);
+    if (ator != NULL) {
+        desenharTexto(TextFormat("%c", ator->nome[0] == '\0' ? '?' : ator->nome[0]),
+                      52, 34, 30, RAYWHITE);
+        desenharTexto(ator->nome, 118, 12, 16, ator->aliado ? SKYBLUE : ORANGE);
+        DrawRectangleRec(converterBoundsVirtual(barraHP), (Color){ 35, 42, 45, 255 });
+        proporcao = ator->vida_maxima > 0 ?
+                    (float)ator->vida_atual / (float)ator->vida_maxima : 0.0f;
+        if (proporcao < 0.0f) {
+            proporcao = 0.0f;
+        } else if (proporcao > 1.0f) {
+            proporcao = 1.0f;
+        }
+        DrawRectangleRec(converterBoundsVirtual((Rectangle){
+            barraHP.x, barraHP.y, barraHP.width * proporcao, barraHP.height
+        }), ator->vida_atual > ator->vida_maxima / 3 ? GREEN : RED);
+        DrawRectangleLinesEx(barraHP, 1.0f, RAYWHITE);
+        desenharTexto(TextFormat("HP: %d/%d", ator->vida_atual, ator->vida_maxima),
+                      25, 105, 12, RAYWHITE);
+        DrawRectangleRec(converterBoundsVirtual(barraEstamina), (Color){ 35, 42, 45, 255 });
+        proporcao = ator->estamina_maxima > 0 ?
+                    (float)ator->estamina_atual / (float)ator->estamina_maxima : 0.0f;
+        if (proporcao < 0.0f) {
+            proporcao = 0.0f;
+        } else if (proporcao > 1.0f) {
+            proporcao = 1.0f;
+        }
+        DrawRectangleRec(converterBoundsVirtual((Rectangle){
+            barraEstamina.x, barraEstamina.y,
+            barraEstamina.width * proporcao, barraEstamina.height
+        }), ator->aliado ? GOLD : SKYBLUE);
+        DrawRectangleLinesEx(barraEstamina, 1.0f, RAYWHITE);
+        desenharTexto(TextFormat("EST: %d/%d",
+                                 ator->estamina_atual, ator->estamina_maxima),
+                      25, 130, 12, RAYWHITE);
+    } else {
+        desenharTexto("PRE-COMBATE", 118, 15, 16, GOLD);
     }
 }
 
@@ -3146,22 +3332,23 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
         }
     } else if (interfaceJogo->estado == TELA_COMBATE_3X6 && mapa != NULL) {
         desenharFila(interfaceJogo);
+        desenharHUDAtorAtivo(interfaceJogo);
         if (interfaceJogo->fase_pre_combate_ativa) {
-            desenharTexto("FASE PRÉ-COMBATE: Clique nos piratas e nas Colunas 0 e 1 para posicionar/trocar!",
-                          80, 62, 18, GOLD);
-            desenharTexto("Inspecione qualquer unidade selecionando-a e clicando em DETALHES.",
-                          80, 90, 15, LIGHTGRAY);
+            desenharTexto("PRÉ-COMBATE | Posicione a tripulação nas colunas 0 e 1.",
+                          390, 10, 14, GOLD);
+            desenharTexto("Selecione uma unidade para ver seus detalhes.",
+                          390, 34, 13, LIGHTGRAY);
         } else {
             desenharTexto(TextFormat("Turno: %s | Ações restantes: %d",
                                      interfaceJogo->ator_atual == NULL ?
                                      "aguardando" : interfaceJogo->ator_atual->nome,
                                      interfaceJogo->ator_atual == NULL ?
                                      0 : interfaceJogo->ator_atual->acoes_basicas_restantes),
-                          80, 58, 20,
+                          390, 10, 13,
                           (interfaceJogo->ator_atual != NULL &&
                            !interfaceJogo->ator_atual->aliado) ? ORANGE : GOLD);
             if (interfaceJogo->log_combate[0] != '\0') {
-                desenharTexto(interfaceJogo->log_combate, 80, 88, 16, RAYWHITE);
+                desenharTexto(interfaceJogo->log_combate, 90, 578, 12, RAYWHITE);
             }
             if (mapa->boss_fase_2_ativa) {
                 int gruntsVivos = 0;
@@ -3178,27 +3365,34 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
                     }
                 }
                 if (gruntsVivos > 0) {
-                    DrawRectangle(220, 105, 840, 30, (Color){ 145, 42, 38, 245 });
-                    DrawRectangleLines(220, 105, 840, 30, GOLD);
+                    DrawRectangle(390, 70, 650, 30, (Color){ 145, 42, 38, 245 });
+                    DrawRectangleLines(390, 70, 650, 30, GOLD);
                     desenharTexto(TextFormat("BARBA NEGRA IMUNE: derrote os Grunts com Espada! Restantes: %d",
                                              gruntsVivos),
-                                  245, 112, 14, RAYWHITE);
+                                  405, 77, 12, RAYWHITE);
                 }
             }
         }
         desenharTabuleiro(interfaceJogo, mapa, alcanceAtivo);
         DrawRectangle(70, 600, 1170, 102, (Color){ 12, 20, 29, 235 });
         if (interfaceJogo->fase_pre_combate_ativa) {
-            DrawRectangle(90, 630, 260, 55, (Color){ 45, 125, 70, 255 });
-            desenharTexto("INICIAR COMBATE", 132, 648, 19, RAYWHITE);
-            DrawRectangle(370, 630, 190, 55,
-                          interfaceJogo->popup_ativo == POPUP_MOCHILA_BUILDS ?
-                          (Color){ 65, 115, 135, 255 } : (Color){ 48, 65, 78, 255 });
-            desenharTexto("MOCHILA / ITENS", 390, 648, 16, RAYWHITE);
-            DrawRectangle(975, 630, 130, 55,
-                          interfaceJogo->popup_ativo == POPUP_DETALHES_PERSONAGEM ?
-                          (Color){ 65, 115, 135, 255 } : (Color){ 42, 63, 76, 255 });
-            desenharTexto("DETALHES", 985, 648, 15, RAYWHITE);
+            desenharTexto("Clique nos piratas para posicionar/trocar antes de iniciar.",
+                          90, 578, 12, LIGHTGRAY);
+            DrawUIButtonCustom((Rectangle){ 90.0f, 630.0f, 260.0f, 55.0f },
+                               "INICIAR COMBATE", interfaceJogo->texBtnPadrao,
+                               obterFonteInterface());
+            DrawUIButtonCustom((Rectangle){ 370.0f, 630.0f, 190.0f, 55.0f },
+                               "MOCHILA / ITENS", interfaceJogo->texBtnPadrao,
+                               obterFonteInterface());
+            DrawUIButtonCustom((Rectangle){ 975.0f, 630.0f, 130.0f, 55.0f },
+                               "DETALHES", interfaceJogo->texBtnPadrao,
+                               obterFonteInterface());
+            if (interfaceJogo->popup_ativo == POPUP_MOCHILA_BUILDS) {
+                DrawRectangleLines(370, 630, 190, 55, GOLD);
+            }
+            if (interfaceJogo->popup_ativo == POPUP_DETALHES_PERSONAGEM) {
+                DrawRectangleLines(975, 630, 130, 55, GOLD);
+            }
         } else {
             int habDesbloq = interfaceJogo->ator_atual != NULL ?
                              interfaceJogo->ator_atual->habilidades_desbloqueadas : 1;
@@ -3222,38 +3416,50 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
                                   90, 608, 14, LIGHTGRAY);
                 }
             }
-            DrawRectangle(90, 630, 130, 55,
-                          interfaceJogo->acao_combate == ACAO_TELA_MOVER ?
-                          (Color){ 65, 115, 135, 255 } : (Color){ 42, 63, 76, 255 });
-            DrawRectangle(235, 630, 130, 55, (Color){ 42, 63, 76, 255 });
-            DrawRectangle(380, 630, 130, 55,
-                          interfaceJogo->acao_combate == ACAO_TELA_HABILIDADE_0 ?
-                          (Color){ 65, 115, 135, 255 } : (Color){ 42, 63, 76, 255 });
-            DrawRectangle(525, 630, 130, 55,
-                          habDesbloq >= 2 ?
-                          (interfaceJogo->acao_combate == ACAO_TELA_HABILIDADE_1 ?
-                           (Color){ 65, 115, 135, 255 } : (Color){ 42, 63, 76, 255 }) :
-                          (Color){ 30, 35, 40, 255 });
-            DrawRectangle(670, 630, 130, 55,
-                          habDesbloq >= 3 ?
-                          (interfaceJogo->acao_combate == ACAO_TELA_HABILIDADE_2 ?
-                           (Color){ 65, 115, 135, 255 } : (Color){ 42, 63, 76, 255 }) :
-                          (Color){ 30, 35, 40, 255 });
-            DrawRectangle(815, 630, 150, 55,
-                          interfaceJogo->popup_ativo == POPUP_MOCHILA_BUILDS ?
-                          (Color){ 65, 115, 135, 255 } : (Color){ 42, 63, 76, 255 });
-            DrawRectangle(975, 630, 130, 55,
-                          interfaceJogo->popup_ativo == POPUP_DETALHES_PERSONAGEM ?
-                          (Color){ 65, 115, 135, 255 } : (Color){ 42, 63, 76, 255 });
-            desenharTexto("MOVER (1)", 106, 648, 16, RAYWHITE);
-            desenharTexto("DESCANSAR", 244, 648, 15, RAYWHITE);
-            desenharTexto("HABILIDADE 1", 385, 648, 14, RAYWHITE);
-            desenharTexto(habDesbloq >= 2 ? "HABILIDADE 2" : "HAB 2 (Nv3)",
-                          536, 648, 15, habDesbloq >= 2 ? RAYWHITE : GRAY);
-            desenharTexto(habDesbloq >= 3 ? "ULTIMATE" : "ULT (Nv6)",
-                          684, 648, 15, habDesbloq >= 3 ? RAYWHITE : GRAY);
-            desenharTexto("USAR ITEM", 840, 648, 16, RAYWHITE);
-            desenharTexto("DETALHES", 985, 648, 15, RAYWHITE);
+            DrawUIButtonCustom((Rectangle){ 90.0f, 630.0f, 130.0f, 55.0f },
+                               "MOVER (1)", interfaceJogo->texBtnPadrao,
+                               obterFonteInterface());
+            DrawUIButtonCustom((Rectangle){ 235.0f, 630.0f, 130.0f, 55.0f },
+                               "DESCANSAR", interfaceJogo->texBtnPadrao,
+                               obterFonteInterface());
+            DrawUIButtonCustom((Rectangle){ 380.0f, 630.0f, 130.0f, 55.0f },
+                               "HABILIDADE 1", interfaceJogo->texBtnPadrao,
+                               obterFonteInterface());
+            DrawUIButtonCustom((Rectangle){ 525.0f, 630.0f, 130.0f, 55.0f },
+                               habDesbloq >= 2 ? "HABILIDADE 2" : NULL,
+                               interfaceJogo->texBtnPadrao, obterFonteInterface());
+            DrawUIButtonCustom((Rectangle){ 670.0f, 630.0f, 130.0f, 55.0f },
+                               habDesbloq >= 3 ? "ULTIMATE" : NULL,
+                               interfaceJogo->texBtnPadrao, obterFonteInterface());
+            DrawUIButtonCustom((Rectangle){ 815.0f, 630.0f, 150.0f, 55.0f },
+                               "USAR ITEM", interfaceJogo->texBtnPadrao,
+                               obterFonteInterface());
+            DrawUIButtonCustom((Rectangle){ 975.0f, 630.0f, 130.0f, 55.0f },
+                               "DETALHES", interfaceJogo->texBtnPadrao,
+                               obterFonteInterface());
+            if (habDesbloq < 2) {
+                DrawRectangle(525, 630, 130, 55, (Color){ 10, 14, 18, 130 });
+                desenharTexto("HAB 2 (Nv3)", 536, 648, 15, GRAY);
+            }
+            if (habDesbloq < 3) {
+                DrawRectangle(670, 630, 130, 55, (Color){ 10, 14, 18, 130 });
+                desenharTexto("ULT (Nv6)", 684, 648, 15, GRAY);
+            }
+            if (interfaceJogo->acao_combate == ACAO_TELA_MOVER) {
+                DrawRectangleLines(90, 630, 130, 55, GOLD);
+            } else if (interfaceJogo->acao_combate == ACAO_TELA_HABILIDADE_0) {
+                DrawRectangleLines(380, 630, 130, 55, GOLD);
+            } else if (interfaceJogo->acao_combate == ACAO_TELA_HABILIDADE_1) {
+                DrawRectangleLines(525, 630, 130, 55, GOLD);
+            } else if (interfaceJogo->acao_combate == ACAO_TELA_HABILIDADE_2) {
+                DrawRectangleLines(670, 630, 130, 55, GOLD);
+            }
+            if (interfaceJogo->popup_ativo == POPUP_MOCHILA_BUILDS) {
+                DrawRectangleLines(815, 630, 150, 55, GOLD);
+            }
+            if (interfaceJogo->popup_ativo == POPUP_DETALHES_PERSONAGEM) {
+                DrawRectangleLines(975, 630, 130, 55, GOLD);
+            }
         }
     } else if (interfaceJogo->estado == TELA_VITORIA) {
         desenharTexto("VITÓRIA! BARBA NEGRA FOI DERROTADO!", 265, 250, 32, GOLD);
@@ -3296,14 +3502,45 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
 void descarregarInterface(InterfaceJogo *interfaceJogo)
 {
     if (interfaceJogo != NULL) {
+        int indice;
         if (interfaceJogo->bgMar.id != 0) {
             UnloadTexture(interfaceJogo->bgMar);
             interfaceJogo->bgMar = (Texture2D){ 0 };
+        }
+        for (indice = 0; indice < 5; indice++) {
+            if (interfaceJogo->bgCombatePool[indice].id != 0 &&
+                interfaceJogo->bgCombatePool[indice].id != interfaceJogo->bgNavio.id) {
+                UnloadTexture(interfaceJogo->bgCombatePool[indice]);
+            }
+            interfaceJogo->bgCombatePool[indice] = (Texture2D){ 0 };
         }
         if (interfaceJogo->bgNavio.id != 0) {
             UnloadTexture(interfaceJogo->bgNavio);
             interfaceJogo->bgNavio = (Texture2D){ 0 };
         }
+        if (interfaceJogo->bgBoss.id != 0) {
+            UnloadTexture(interfaceJogo->bgBoss);
+            interfaceJogo->bgBoss = (Texture2D){ 0 };
+        }
+        if (interfaceJogo->texBtnPadrao.id != 0) {
+            UnloadTexture(interfaceJogo->texBtnPadrao);
+            interfaceJogo->texBtnPadrao = (Texture2D){ 0 };
+        }
+        if (interfaceJogo->texFrameRetrato.id != 0) {
+            UnloadTexture(interfaceJogo->texFrameRetrato);
+            interfaceJogo->texFrameRetrato = (Texture2D){ 0 };
+        }
+        if (interfaceJogo->texPainelDetalhes.id != 0) {
+            UnloadTexture(interfaceJogo->texPainelDetalhes);
+            interfaceJogo->texPainelDetalhes = (Texture2D){ 0 };
+        }
+        if (interfaceJogo->texPainelMochila.id != 0) {
+            UnloadTexture(interfaceJogo->texPainelMochila);
+            interfaceJogo->texPainelMochila = (Texture2D){ 0 };
+        }
+        interfaceJogo->qtdBgCombate = 0;
+        interfaceJogo->bgCombateAtualIdx = -1;
+        interfaceJogo->bgBossAtivo = false;
         if (interfaceJogo->fonteJogo.texture.id != 0) {
             UnloadFont(interfaceJogo->fonteJogo);
             interfaceJogo->fonteJogo = (Font){ 0 };

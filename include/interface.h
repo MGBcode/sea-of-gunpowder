@@ -38,6 +38,15 @@ typedef struct {
     Font fonteJogo;
     Texture2D bgMar;
     Texture2D bgNavio;
+    Texture2D bgCombatePool[5];
+    int qtdBgCombate;
+    int bgCombateAtualIdx;
+    Texture2D bgBoss;
+    bool bgBossAtivo;
+    Texture2D texBtnPadrao;
+    Texture2D texFrameRetrato;
+    Texture2D texPainelDetalhes;
+    Texture2D texPainelMochila;
     EstadoTelaPrincipal estado;
     TipoPopupModal popup_ativo;
     AcaoTelaCombate acao_combate;
@@ -89,6 +98,10 @@ typedef struct {
     int *moedas;
     int *nivel_dificuldade;
 } InterfaceJogo;
+
+void DrawUIButtonCustom(Rectangle bounds, const char *text, Texture2D texBotao, Font font);
+void DrawUIPanelCustom(Rectangle bounds, Texture2D texPainel, Color colorFallback);
+void DrawUIFrameCustom(Rectangle bounds, Texture2D texBorda);
 
 // Inicializa o estado visual e abre a janela Raylib.
 void inicializarInterface(InterfaceJogo *interfaceJogo);
