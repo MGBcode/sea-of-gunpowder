@@ -13,8 +13,8 @@
 ## Como Compilar e Executar o Jogo
 
 ### Pré-requisitos (Windows)
-- Compilador C compatível com C99 (**GCC / MinGW-w64** ou **w64devkit**) e utilitário `make`.
-- Biblioteca **Raylib 5.5** instalada em `C:/raylib/raylib` (ou apontada pela variável `RAYLIB_DIR`).
+- **w64devkit x64** e utilitário `make` no `PATH`. O projeto usa o GCC do w64devkit em `C:\w64devkit`, mesmo se outro MinGW estiver instalado.
+- Biblioteca **Raylib 5.5** pré-compilada para MinGW-w64, com os headers em `C:\w64devkit\include` e `libraylib.a` em `C:\w64devkit\lib`.
 
 ### Passo 1 — Compilar o projeto
 Abra o terminal (**PowerShell** ou **CMD**) na pasta raiz do projeto (`sea-of-gunpowder`) e execute:
@@ -23,13 +23,7 @@ Abra o terminal (**PowerShell** ou **CMD**) na pasta raiz do projeto (`sea-of-gu
 make
 ```
 
-*(Caso utilize o `w64devkit` sem adicioná-lo ao `PATH` do Windows, execute:)*
-
-```powershell
-C:\w64devkit\bin\make.exe CC=C:/w64devkit/bin/gcc.exe
-```
-
-O comando compilará todos os arquivos de `src/` e gerará o executável em `build/jogo.exe`.
+O comando compilará todos os arquivos de `src/` e gerará o executável em `build/jogo.exe`. Se você acabou de adicionar o w64devkit ao `PATH`, abra um terminal novo antes de executar `make`.
 
 ### Passo 2 — Executar o jogo
 Para abrir o jogo com a interface gráfica:
