@@ -1,6 +1,7 @@
 #ifndef INTERFACE_H
 #define INTERFACE_H
 
+#include "raylib.h"
 #include "ordenacao.h"
 
 typedef enum {
@@ -32,6 +33,9 @@ typedef enum {
 } AcaoTelaCombate;
 
 typedef struct {
+    Font fonteJogo;
+    Texture2D bgMar;
+    Texture2D bgNavio;
     EstadoTelaPrincipal estado;
     TipoPopupModal popup_ativo;
     AcaoTelaCombate acao_combate;
@@ -83,6 +87,8 @@ typedef struct {
 
 // Inicializa o estado visual e abre a janela Raylib.
 void inicializarInterface(InterfaceJogo *interfaceJogo);
+// Desenha texto em coordenadas virtuais usando a fonte da interface atual.
+void desenharTextoGlobal(const char *texto, Vector2 pos, float tamanho, Color cor);
 // Processa menus, pop-ups, rota, seleção de unidade e cliques de combate.
 void atualizarInterface(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
                         Combatente piratasDisponiveis[], int totalDisponiveis,
@@ -102,7 +108,7 @@ bool converterCoordenadaMouseVirtual(float mouseRealX, float mouseRealY,
 // Processa a desistência, reseta piratas mortos ao nível 1 e solicita reposição.
 void processarFugaETrocaTripulacao(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
                                    Combatente piratasDisponiveis[], int totalDisponiveis);
-// Encerra a janela aberta pela interface.
-void encerrarInterface(void);
+// Libera os recursos visuais e encerra a janela Raylib.
+void descarregarInterface(InterfaceJogo *interfaceJogo);
 
 #endif

@@ -1559,7 +1559,7 @@ int main(int argc, char *argv[])
             desenharInterface(&interfaceJogo, &mapa, NULL);
         }
     }
-    encerrarInterface();
+    descarregarInterface(&interfaceJogo);
     liberarEstruturasJogo(raizRotas, &inventario, NULL);
     for (indice = 0; indice < TOTAL_PIRATAS_PREDEFINIDOS; indice++) {
         liberarListaItensCombatente(&piratasDisponiveis[indice].build_passivos);

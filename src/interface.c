@@ -15,8 +15,7 @@
 #define ALTURA_RENDER_1080P 1080
 #define ESCALA_1080P(v) (((float)(v)) * 1.5f)
 
-static Font fonteJogo;
-static bool fonteCarregada = false;
+static const InterfaceJogo *interfaceRenderizada;
 static RenderTexture2D canvasVirtual;
 static bool canvasCarregado = false;
 
@@ -117,15 +116,44 @@ static Vector2 obterMouseVirtual(void)
     return mouseReal;
 }
 
-// Inicia o desenho no framebuffer virtual 1280x720 para suportar maximizar e tela cheia.
-static void iniciarQuadroVirtual(Color corFundo)
+static void desenharFundoEstado(const InterfaceJogo *interfaceJogo)
+{
+    Texture2D textura = { 0 };
+    Rectangle origem;
+    Rectangle destino;
+    if (interfaceJogo == NULL) {
+        return;
+    }
+    if (interfaceJogo->estado == TELA_COMBATE_3X6) {
+        textura = interfaceJogo->bgNavio;
+    } else {
+        textura = interfaceJogo->bgMar;
+    }
+    if (textura.id == 0) {
+        return;
+    }
+    origem = (Rectangle){ 0.0f, 0.0f, (float)textura.width,
+                          (float)textura.height };
+    destino = canvasCarregado && canvasVirtual.id != 0 ?
+              (Rectangle){ 0.0f, 0.0f, (float)canvasVirtual.texture.width,
+                           (float)canvasVirtual.texture.height } :
+              (Rectangle){ 0.0f, 0.0f, (float)GetScreenWidth(),
+                           (float)GetScreenHeight() };
+    DrawTexturePro(textura, origem, destino, (Vector2){ 0.0f, 0.0f },
+                   0.0f, WHITE);
+}
+
+// Inicia o quadro e aplica o fundo apropriado ao estado da interface.
+static void iniciarQuadroVirtual(const InterfaceJogo *interfaceJogo, Color corFundo)
 {
     if (canvasCarregado && canvasVirtual.id != 0) {
         BeginTextureMode(canvasVirtual);
         ClearBackground(corFundo);
+        desenharFundoEstado(interfaceJogo);
     } else {
         BeginDrawing();
         ClearBackground(corFundo);
+        desenharFundoEstado(interfaceJogo);
     }
 }
 
@@ -154,20 +182,38 @@ static void finalizarQuadroVirtual(void)
     }
 }
 
-// Renderiza texto nítido em 1080p com filtro bilinear usando a fonte TrueType carregada.
+static Font obterFonteInterface(void)
+{
+    if (interfaceRenderizada != NULL && interfaceRenderizada->fonteJogo.texture.id != 0) {
+        return interfaceRenderizada->fonteJogo;
+    }
+    return GetFontDefault();
+}
+
+void desenharTextoGlobal(const char *texto, Vector2 pos, float tamanho, Color cor)
+{
+    if (texto != NULL) {
+        DrawTextEx(obterFonteInterface(), texto,
+                   (Vector2){ pos.x * 1.5f, pos.y * 1.5f },
+                   tamanho * 1.5f, 1.5f, cor);
+    }
+}
+
 static void desenharTexto(const char *texto, int posX, int posY, int tamanho, Color cor)
 {
-    if (texto == NULL) {
-        return;
+    if (texto != NULL) {
+        desenharTextoGlobal(texto, (Vector2){ (float)posX, (float)posY },
+                            (float)tamanho + 2.0f, cor);
     }
-    if (fonteCarregada && fonteJogo.texture.id != 0) {
-        DrawTextEx(fonteJogo, texto,
-                   (Vector2){ ESCALA_1080P(posX), ESCALA_1080P(posY) },
-                   (float)(tamanho + 2) * 1.5f, 1.5f, cor);
-    } else {
-        DrawText(texto, (int)ESCALA_1080P(posX), (int)ESCALA_1080P(posY),
-                 (int)((float)tamanho * 1.5f), cor);
-    }
+}
+
+static int medirLarguraTexto(const char *texto, int tamanho);
+
+static void desenharTextoCentralizado(const char *texto, int posY,
+                                      int tamanho, Color cor)
+{
+    int largura = medirLarguraTexto(texto, tamanho);
+    desenharTexto(texto, (LARGURA_VIRTUAL - largura) / 2, posY, tamanho, cor);
 }
 
 // Mede a largura lógica de uma string na fonte 1080p atual para quebra automática de linha.
@@ -176,8 +222,8 @@ static int medirLarguraTexto(const char *texto, int tamanho)
     if (texto == NULL || texto[0] == '\0') {
         return 0;
     }
-    if (fonteCarregada && fonteJogo.texture.id != 0) {
-        return (int)(MeasureTextEx(fonteJogo, texto,
+    if (obterFonteInterface().texture.id != 0) {
+        return (int)(MeasureTextEx(obterFonteInterface(), texto,
                                    (float)(tamanho + 2) * 1.5f, 1.5f).x / 1.5f);
     }
     return MeasureText(texto, tamanho);
@@ -1011,11 +1057,6 @@ static void reiniciarPartidaCompleta(InterfaceJogo *interfaceJogo, Tabuleiro3x6 
 // Inicializa a janela em 1920x1080 (1080p), o framebuffer 1080p e a fonte TrueType de alta nitidez.
 void inicializarInterface(InterfaceJogo *interfaceJogo)
 {
-    static const char *caminhosFontes[3] = {
-        "C:/Windows/Fonts/segoeuisb.ttf",
-        "C:/Windows/Fonts/segoeui.ttf",
-        "C:/Windows/Fonts/arial.ttf"
-    };
     int codepoints[224];
     int indice;
     if (interfaceJogo == NULL) {
@@ -1048,19 +1089,39 @@ void inicializarInterface(InterfaceJogo *interfaceJogo)
         SetTextureFilter(canvasVirtual.texture, TEXTURE_FILTER_BILINEAR);
         canvasCarregado = true;
     }
+    if (FileExists("assets/textures/bg_mar.png")) {
+        interfaceJogo->bgMar = LoadTexture("assets/textures/bg_mar.png");
+        if (interfaceJogo->bgMar.id != 0) {
+            SetTextureFilter(interfaceJogo->bgMar, TEXTURE_FILTER_BILINEAR);
+        } else {
+            TraceLog(LOG_ERROR, "Nao foi possivel carregar assets/textures/bg_mar.png.");
+        }
+    } else {
+        TraceLog(LOG_ERROR, "Arquivo assets/textures/bg_mar.png nao encontrado.");
+    }
     for (indice = 0; indice < 224; indice++) {
         codepoints[indice] = 32 + indice;
     }
-    fonteCarregada = false;
-    for (indice = 0; indice < 3; indice++) {
-        if (FileExists(caminhosFontes[indice])) {
-            fonteJogo = LoadFontEx(caminhosFontes[indice], 56, codepoints, 224);
-            if (fonteJogo.texture.id != 0) {
-                SetTextureFilter(fonteJogo.texture, TEXTURE_FILTER_BILINEAR);
-                fonteCarregada = true;
-                break;
-            }
+    if (FileExists("assets/textures/bg_navio.png")) {
+        interfaceJogo->bgNavio = LoadTexture("assets/textures/bg_navio.png");
+        if (interfaceJogo->bgNavio.id != 0) {
+            SetTextureFilter(interfaceJogo->bgNavio, TEXTURE_FILTER_BILINEAR);
+        } else {
+            TraceLog(LOG_ERROR, "Nao foi possivel carregar assets/textures/bg_navio.png.");
         }
+    } else {
+        TraceLog(LOG_ERROR, "Arquivo assets/textures/bg_navio.png nao encontrado.");
+    }
+    if (FileExists("assets/fonts/font_pirata.ttf")) {
+        interfaceJogo->fonteJogo = LoadFontEx("assets/fonts/font_pirata.ttf",
+                                              128, codepoints, 224);
+        if (interfaceJogo->fonteJogo.texture.id != 0) {
+            SetTextureFilter(interfaceJogo->fonteJogo.texture, TEXTURE_FILTER_BILINEAR);
+        } else {
+            TraceLog(LOG_ERROR, "Nao foi possivel carregar assets/fonts/font_pirata.ttf.");
+        }
+    } else {
+        TraceLog(LOG_ERROR, "Arquivo assets/fonts/font_pirata.ttf nao encontrado.");
     }
 }
 
@@ -2315,7 +2376,8 @@ void desenharTelaSelecaoGrupo(InterfaceJogo *interfaceJogo,
     }
     limite = totalDisponiveis < TOTAL_PIRATAS_PREDEFINIDOS ?
              totalDisponiveis : TOTAL_PIRATAS_PREDEFINIDOS;
-    iniciarQuadroVirtual((Color){ 18, 28, 39, 255 });
+    interfaceRenderizada = interfaceJogo;
+    iniciarQuadroVirtual(interfaceJogo, (Color){ 18, 28, 39, 255 });
     desenharTexto(contadorFugas > 0 ?
                   "REPOSIÇÃO DE TRIPULAÇÃO PÓS-FUGA" :
                   "ESCOLHA SUA TRIPULAÇÃO",
@@ -2676,6 +2738,9 @@ static void desenharTabuleiro(const InterfaceJogo *interfaceJogo,
             if (interfaceJogo->fase_pre_combate_ativa && coluna <= 1) {
                 cor = (Color){ 38, 82, 95, 255 };
             }
+            if (unidade == NULL || !unidade->vivo) {
+                cor.a = 128;
+            }
             DrawRectangle(posX, posY, interfaceJogo->largura_celula - 4,
                           interfaceJogo->altura_celula - 4, cor);
             if (!interfaceJogo->fase_pre_combate_ativa &&
@@ -2777,17 +2842,18 @@ static void desenharTabuleiro(const InterfaceJogo *interfaceJogo,
 }
 
 // Desenha a tela de menu principal renderizada em alta nitidez 1080p.
-static void desenharMenu(void)
+static void desenharMenu(const InterfaceJogo *interfaceJogo)
 {
-    iniciarQuadroVirtual((Color){ 18, 28, 39, 255 });
-    desenharTexto("SEA OF GUNPOWDER", 435, 165, 36, GOLD);
-    desenharTexto("Crônicas de Sangue e Pólvora - RPG Tático Roguelike em Turnos", 295, 225, 20, RAYWHITE);
+    iniciarQuadroVirtual(interfaceJogo, (Color){ 18, 28, 39, 255 });
+    desenharTextoCentralizado("SEA OF GUNPOWDER", 120, 80, GOLD);
+    desenharTextoCentralizado("CLIQUE PARA COMEÇAR", 250, 40, RAYWHITE);
     DrawRectangle(470, 350, 340, 70, (Color){ 45, 125, 70, 255 });
     desenharTexto("INICIAR AVENTURA", 525, 374, 22, RAYWHITE);
     DrawRectangle(470, 445, 340, 60, (Color){ 135, 48, 38, 255 });
     DrawRectangleLines(470, 445, 340, 60, GOLD);
     desenharTexto("SAIR DO JOGO", 575, 464, 20, RAYWHITE);
-    desenharTexto("Controle 100% pelo Mouse | ESC abre o menu de Pause.", 420, 535, 16, LIGHTGRAY);
+    desenharTexto("Controle 100% pelo Mouse | ESC abre o menu de Pause.",
+                  420, 535, 16, LIGHTGRAY);
     finalizarQuadroVirtual();
 }
 
@@ -2800,8 +2866,9 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
     if (interfaceJogo == NULL) {
         return;
     }
+    interfaceRenderizada = interfaceJogo;
     if (interfaceJogo->estado == TELA_MENU_PRINCIPAL) {
-        desenharMenu();
+        desenharMenu(interfaceJogo);
         return;
     }
     if (alcanceAtivo == NULL && interfaceJogo->estado == TELA_COMBATE_3X6 && mapa != NULL) {
@@ -2821,7 +2888,7 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
             alcanceAtivo = alcanceDinamico;
         }
     }
-    iniciarQuadroVirtual((Color){ 18, 28, 39, 255 });
+    iniciarQuadroVirtual(interfaceJogo, (Color){ 18, 28, 39, 255 });
     if (interfaceJogo->estado == TELA_MAPA_ROTAS) {
         int etapaAtual = (interfaceJogo->rota_atual != NULL &&
                           *interfaceJogo->rota_atual != NULL) ?
@@ -3029,12 +3096,25 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
     }
 }
 
-// Libera a fonte TrueType, o framebuffer virtual e encerra a janela Raylib.
-void encerrarInterface(void)
+// Libera os recursos visuais da interface e encerra a janela Raylib.
+void descarregarInterface(InterfaceJogo *interfaceJogo)
 {
-    if (fonteCarregada && fonteJogo.texture.id != 0) {
-        UnloadFont(fonteJogo);
-        fonteCarregada = false;
+    if (interfaceJogo != NULL) {
+        if (interfaceJogo->bgMar.id != 0) {
+            UnloadTexture(interfaceJogo->bgMar);
+            interfaceJogo->bgMar = (Texture2D){ 0 };
+        }
+        if (interfaceJogo->bgNavio.id != 0) {
+            UnloadTexture(interfaceJogo->bgNavio);
+            interfaceJogo->bgNavio = (Texture2D){ 0 };
+        }
+        if (interfaceJogo->fonteJogo.texture.id != 0) {
+            UnloadFont(interfaceJogo->fonteJogo);
+            interfaceJogo->fonteJogo = (Font){ 0 };
+        }
+        if (interfaceRenderizada == interfaceJogo) {
+            interfaceRenderizada = NULL;
+        }
     }
     if (canvasCarregado && canvasVirtual.id != 0) {
         UnloadRenderTexture(canvasVirtual);
