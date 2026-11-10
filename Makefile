@@ -8,6 +8,7 @@ OBJECTS = $(SOURCES:src/%.c=build/%.o)
 ifeq ($(OS),Windows_NT)
 	SHELL := cmd.exe
 	.SHELLFLAGS := /C
+	unexport C_INCLUDE_PATH
 	CC = C:/w64devkit/bin/gcc.exe
 	LDFLAGS += -LC:/w64devkit/lib
 	TARGET = build/jogo.exe
