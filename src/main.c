@@ -68,7 +68,7 @@ static bool testarClassesEMecanicasCombate(void)
         capitao.habilidades[2].dano_min != 100 || capitao.habilidades[2].dano_max != 130 ||
         gavea.vida_maxima != 120 || gavea.velocidade != 6 ||
         gavea.precisao_melee != 40 || gavea.estamina_maxima != 5 ||
-        gavea.habilidades[0].dano_min != 60 || gavea.habilidades[0].dano_max != 110 ||
+        gavea.habilidades[0].dano_min != 60 || gavea.habilidades[0].dano_max != 100 ||
         gavea.habilidades[2].dano_min != 150 || gavea.habilidades[2].dano_max != 200) {
         fprintf(stderr, "Falha sanitaria: atributos base dos 5 piratas incorretos.\n");
         return false;
@@ -76,7 +76,7 @@ static bool testarClassesEMecanicasCombate(void)
 
     (void)subirNivelPirata(&gavea, 1);
     if (gavea.nivel != 2 || gavea.estamina_maxima != 6 || gavea.vida_maxima != 144 ||
-        gavea.habilidades[0].dano_min != 72 || gavea.habilidades[0].dano_max != 132) {
+        gavea.habilidades[0].dano_min != 72 || gavea.habilidades[0].dano_max != 120) {
         fprintf(stderr, "Falha sanitaria: Gavea Nv 2 (estamina 6 e +20%% vida/dano).\n");
         return false;
     }
@@ -702,10 +702,10 @@ static bool testarClassesEMecanicasCombate(void)
         }
         aplicarBuffElite(&elite);
         if (!elite.eh_elite || elite.vida_maxima != 250 ||
-            elite.habilidades[0].dano_min != 43 ||
-            elite.habilidades[0].dano_max != 62 ||
+            elite.habilidades[0].dano_min != 35 ||
+            elite.habilidades[0].dano_max != 50 ||
             elite.estamina_maxima != 8 || calcularAcoesPorTurno(&elite) != 3) {
-            fprintf(stderr, "Falha sanitaria: elite deve ter +25%% vida/dano, +3 estamina e 3 acoes.\n");
+            fprintf(stderr, "Falha sanitaria: elite deve ter +25%% vida, sem bonus de dano, +3 estamina e 3 acoes.\n");
             return false;
         }
     }

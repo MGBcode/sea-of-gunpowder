@@ -138,7 +138,7 @@ bool criarPirataInicial(int indice, Combatente *destino)
         destino->habilidades[1].duracao_efeito = 3;
         destino->habilidades[2].fogo_amigo = true;
     } else {
-        definirHabilidade(&destino->habilidades[0], "Disparo de Longa Distância", 60, 110,
+        definirHabilidade(&destino->habilidades[0], "Disparo de Longa Distância", 60, 100,
                           40, 3, 2, EFEITO_DANO, ATAQUE_LINHA);
         definirHabilidade(&destino->habilidades[1], "Zarabatana", 0, 0, 40, 2, 1,
                           EFEITO_VENENO, ATAQUE_RANGED);
@@ -500,7 +500,7 @@ int aplicarInflacaoLoja(int preco)
     return precoAjustado;
 }
 
-// Multiplica saúde, dano-base e faixas de habilidade por um percentual inteiro.
+// Multiplica saúde e dano-base/faixas de habilidade por um percentual inteiro.
 static void aplicarMultiplicadorInimigo(Combatente *inimigo, int fator)
 {
     int indice;
@@ -518,14 +518,15 @@ static void aplicarMultiplicadorInimigo(Combatente *inimigo, int fator)
     }
 }
 
-// Marca e fortalece um inimigo de elite sem alterar sua classe ou habilidades.
+// Elites recebem vida e estamina extras, sem bônus de dano.
 void aplicarBuffElite(Combatente *inimigo)
 {
     if (inimigo == NULL || inimigo->eh_elite) {
         return;
     }
     inimigo->eh_elite = true;
-    aplicarMultiplicadorInimigo(inimigo, 125);
+    inimigo->vida_maxima = (inimigo->vida_maxima * 125) / 100;
+    inimigo->vida_atual = (inimigo->vida_atual * 125) / 100;
     inimigo->estamina_maxima += 3;
     inimigo->estamina_atual += 3;
 }

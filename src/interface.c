@@ -2212,7 +2212,7 @@ static const char *descricaoPassiva(ClassePirata classe, bool aprimorada)
         { "Passiva Nv1 (Vigia do Convés): Mantém a guarda dos marujos próximos; aliados adjacentes em cruz não sofrem +25% de dano extra nem perdem estamina ao serem atacados em Descanso.",
           "Passiva Nv4 (Ordem de Abordagem): Sua presença inspira ferocidade na tripulação; aliados posicionados nas 4 casas adjacentes em cruz causam +20% de dano em todos os ataques." },
         { "Passiva Nv1 (Olho de Águia): Quanto mais perto o alvo estiver da mira do seu rifle, mais certeiro é o disparo: recebe +5% de Precisão para cada quadrado de aproximação (até +25% a 1 casa).",
-          "Passiva Nv4 (Ponto Vital): A curta distância seus tiros destroçam a defesa rival, concedendo +10% de dano adicional para cada quadrado mais próximo do alvo (até +50% a 1 casa)." }
+          "Passiva Nv4 (Ponto Vital): Seus disparos causam +15% de dano a 1 casa, +10% a 2 casas e +5% a 3 casas." }
     };
     if (classe < CLASSE_BUCANEIRO || classe > CLASSE_GAVEA) {
         return "Sem passiva definida.";
@@ -2562,7 +2562,7 @@ static void desenharDetalhes(const InterfaceJogo *interfaceJogo, const Combatent
     } else {
         if (unidade->eh_elite) {
             posY += desenharTextoQuebrado(
-                "ELITE: +25% de vida e dano, +3 de estamina e 3 ações por turno.",
+                "ELITE: +25% de vida, +3 de estamina e 3 ações por turno.",
                 192, posY, 675, 14, 18, GOLD, minY, maxY) + 6;
         }
         posY += desenharTextoQuebrado(descricaoPassivaInimigo(unidade), 192, posY,
