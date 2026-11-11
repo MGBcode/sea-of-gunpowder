@@ -4,6 +4,7 @@ LDFLAGS ?=
 LDLIBS ?= -lraylib -lm
 SOURCES = src/main.c src/estruturas.c src/ordenacao.c src/combate.c src/ia_inimigos.c src/dados_jogo.c src/animacao.c src/interface.c
 OBJECTS = $(SOURCES:src/%.c=build/%.o)
+HEADERS = $(wildcard include/*.h)
 
 ifeq ($(OS),Windows_NT)
 	SHELL := cmd.exe
@@ -35,7 +36,7 @@ all: $(TARGET)
 $(TARGET): $(OBJECTS)
 	$(CC) $(LDFLAGS) -o $@ $(OBJECTS) $(LDLIBS)
 
-build/%.o: src/%.c
+build/%.o: src/%.c $(HEADERS)
 	$(MKDIR_BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
