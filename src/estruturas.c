@@ -70,10 +70,17 @@ static NoRota *criarEtapaRota(int dificuldade, int etapa, TipoNoRota tipo)
     } else if (etapa == 3) {
         no->caminho1 = criarEtapaRota(dificuldade, 4, ROTA_CHEFE);
         no->caminho2 = criarEtapaRota(dificuldade, 4, ROTA_CHEFE);
-        no->loja = criarEtapaRota(dificuldade, 4, ROTA_CHEFE);
+        no->loja = criarEtapaRota(dificuldade, 4, ROTA_LOJA);
+        if (no->loja != NULL) {
+            no->loja->caminho1 = criarEtapaRota(dificuldade, 5, ROTA_CHEFE);
+        }
     }
     if ((etapa < 4) &&
         (no->caminho1 == NULL || no->caminho2 == NULL || no->loja == NULL)) {
+        liberarArvoreRotas(no);
+        return NULL;
+    }
+    if (etapa == 3 && no->loja->caminho1 == NULL) {
         liberarArvoreRotas(no);
         return NULL;
     }

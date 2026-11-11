@@ -207,8 +207,13 @@ bool avancarProximoTurno(EntradaIniciativa fila[], int total, int *indiceAtual,
         if (unidade == NULL || !unidade->vivo) {
             continue;
         }
+        unidade->turno_perdido = false;
         if (!unidade->eh_boss || entrada->indice_turno_boss == 0) {
             processarStatusInicioTurno(mapa, unidade);
+        }
+        if (unidade->turnos_atordoado > 0) {
+            unidade->turnos_atordoado--;
+            unidade->turno_perdido = true;
         }
         if (unidade->vivo && !unidade->turno_perdido) {
             return true;
@@ -1334,10 +1339,6 @@ void processarStatusInicioTurno(Tabuleiro3x6 *mapa, Combatente *unidade)
         if (unidade->turnos_tonico == 0) {
             unidade->bonus_tonico_percentual = 0;
         }
-    }
-    if (unidade->turnos_atordoado > 0) {
-        unidade->turnos_atordoado--;
-        unidade->turno_perdido = true;
     }
     if (unidade->vivo && !unidade->turno_perdido) {
         unidade->acoes_basicas_restantes = calcularAcoesPorTurno(unidade);

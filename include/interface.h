@@ -74,6 +74,7 @@ typedef struct {
     int indice_compra_pendente;
     int item_id_selecionado;
     int total_itens_loja;
+    int etapa_loja_atual;
     Item itens_loja[3];
     int estoques_loja[3];
     Item itens_recompensa[6];

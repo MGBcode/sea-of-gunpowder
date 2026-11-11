@@ -859,6 +859,35 @@ static void registrarItensRecompensa(InterfaceJogo *interfaceJogo,
     }
 }
 
+static bool prepararLojaOpcional(InterfaceJogo *interfaceJogo, NoRota *rotaAtual)
+{
+    NoRota *noLoja;
+    unsigned int semente;
+    if (interfaceJogo == NULL || rotaAtual == NULL || rotaAtual->loja == NULL ||
+        rotaAtual->loja->tipo != ROTA_LOJA) {
+        return false;
+    }
+    noLoja = rotaAtual->loja;
+    if (interfaceJogo->etapa_loja_atual == noLoja->etapa &&
+        interfaceJogo->total_itens_loja == 3) {
+        return true;
+    }
+    semente = (unsigned int)(noLoja->etapa * 97 +
+                             contadorFugas * 31 + contadorSaques * 19 +
+                             (interfaceJogo->moedas != NULL ?
+                              *interfaceJogo->moedas : 0) +
+                             GetRandomValue(1, 10000));
+    interfaceJogo->total_itens_loja =
+        sortearItensLoja(noLoja->etapa, semente, interfaceJogo->itens_loja,
+                         interfaceJogo->estoques_loja, 3);
+    if (interfaceJogo->total_itens_loja != 3) {
+        TraceLog(LOG_ERROR, "Não foi possível gerar o estoque da loja opcional.");
+        return false;
+    }
+    interfaceJogo->etapa_loja_atual = noLoja->etapa;
+    return true;
+}
+
 // Aplica a recompensa da rota ou do saque da loja após vencer o combate.
 static void concluirVitoria(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
                             Combatente piratas[], int totalPiratas)
@@ -881,7 +910,10 @@ static void concluirVitoria(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
                                        interfaceJogo->total_itens_loja,
                                        interfaceJogo->inventario)) {
             TraceLog(LOG_ERROR, "Falha ao transferir itens saqueados da loja.");
+            interfaceJogo->estado = TELA_FIM_DE_JOGO;
+            return;
         }
+        interfaceJogo->etapa_loja_atual = 0;
         interfaceJogo->saque_em_andamento = false;
     } else if (tipoAtual != ROTA_CHEFE) {
         if (!aplicarRecompensaRota(tipoAtual, piratas, totalPiratas,
@@ -1196,6 +1228,7 @@ void processarFugaETrocaTripulacao(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *m
     interfaceJogo->total_itens_loja =
         sortearItensLoja(1, (unsigned int)(contadorFugas * 131 + contadorSaques * 37 + 17),
                          interfaceJogo->itens_loja, interfaceJogo->estoques_loja, 3);
+    interfaceJogo->etapa_loja_atual = 1;
     interfaceJogo->ator_atual = NULL;
     interfaceJogo->acao_combate = ACAO_TELA_NENHUMA;
     if (*interfaceJogo->raiz_rotas == NULL) {
@@ -1254,6 +1287,7 @@ static void reiniciarPartidaCompleta(InterfaceJogo *interfaceJogo, Tabuleiro3x6 
     interfaceJogo->total_itens_loja =
         sortearItensLoja(1, (unsigned int)GetRandomValue(1, 100000),
                          interfaceJogo->itens_loja, interfaceJogo->estoques_loja, 3);
+    interfaceJogo->etapa_loja_atual = 1;
     interfaceJogo->estado = TELA_SELECAO_TRIPULACAO;
 }
 
@@ -1488,25 +1522,17 @@ void atualizarInterface(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
                     TraceLog(LOG_ERROR, "Não foi possível confirmar a rota selecionada.");
                     return;
                 }
-                *rotaAtual = avancarParaRota(*rotaAtual, escolha);
-                if (escolha == 3 && (*rotaAtual)->tipo == ROTA_LOJA) {
-                    unsigned int sementeLoja =
-                        (unsigned int)((*rotaAtual)->etapa * 97 +
-                                       contadorFugas * 31 + contadorSaques * 19 +
-                                       (moedas != NULL ? *moedas : 0) +
-                                       GetRandomValue(1, 10000));
-                    interfaceJogo->total_itens_loja =
-                        sortearItensLoja((*rotaAtual)->etapa, sementeLoja,
-                                         interfaceJogo->itens_loja,
-                                         interfaceJogo->estoques_loja, 3);
-                    interfaceJogo->saque_em_andamento = false;
-                    interfaceJogo->loja_aberta_pendente = true;
-                    interfaceJogo->popup_ativo = POPUP_LOJA;
-                } else {
-                    interfaceJogo->saque_em_andamento = false;
-                    iniciarEncontro(interfaceJogo, mapa, piratasDisponiveis,
-                                    totalDisponiveis);
+                {
+                    NoRota *proximaRota = avancarParaRota(*rotaAtual, escolha);
+                    if (proximaRota == NULL) {
+                        TraceLog(LOG_ERROR, "A rota escolhida não possui uma próxima etapa.");
+                        return;
+                    }
+                    *rotaAtual = proximaRota;
                 }
+                interfaceJogo->saque_em_andamento = false;
+                iniciarEncontro(interfaceJogo, mapa, piratasDisponiveis,
+                                totalDisponiveis);
                 return;
             }
             if (retanguloClicado((Rectangle){ 610, 390, 180, 55 }, mouse)) {
@@ -1651,6 +1677,13 @@ void atualizarInterface(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
                 return;
             }
             if (retanguloClicado((Rectangle){ 400, 495, 215, 55 }, mouse)) {
+                if (rotaAtual == NULL || *rotaAtual == NULL ||
+                    (*rotaAtual)->loja == NULL ||
+                    (*rotaAtual)->loja->tipo != ROTA_LOJA) {
+                    TraceLog(LOG_WARNING, "Não há uma rota de loja para saquear nesta etapa.");
+                    return;
+                }
+                *rotaAtual = (*rotaAtual)->loja;
                 interfaceJogo->loja_aberta_pendente = false;
                 interfaceJogo->popup_ativo = POPUP_NENHUM;
                 interfaceJogo->saque_em_andamento = true;
@@ -1868,6 +1901,13 @@ void atualizarInterface(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
                 interfaceJogo->popup_ativo = POPUP_CONFIRMAR_ROTA;
                 return;
             }
+            if ((*rotaAtual)->etapa == 3 &&
+                retanguloClicado((Rectangle){ 510, 470, 300, 80 }, mouse) &&
+                prepararLojaOpcional(interfaceJogo, *rotaAtual)) {
+                interfaceJogo->loja_aberta_pendente = true;
+                interfaceJogo->popup_ativo = POPUP_LOJA;
+                return;
+            }
         } else {
             if (retanguloClicado((Rectangle){ 440, 290, 260, 95 }, mouse) &&
                 rotaAtual != NULL && *rotaAtual != NULL &&
@@ -1884,10 +1924,11 @@ void atualizarInterface(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
                 return;
             }
             if (retanguloClicado((Rectangle){ 585, 415, 260, 95 }, mouse) &&
-                rotaAtual != NULL && *rotaAtual != NULL &&
-                (*rotaAtual)->loja != NULL) {
-                interfaceJogo->escolha_rota_pendente = 3;
-                interfaceJogo->popup_ativo = POPUP_CONFIRMAR_ROTA;
+                rotaAtual != NULL && *rotaAtual != NULL) {
+                if (prepararLojaOpcional(interfaceJogo, *rotaAtual)) {
+                    interfaceJogo->loja_aberta_pendente = true;
+                    interfaceJogo->popup_ativo = POPUP_LOJA;
+                }
                 return;
             }
         }
@@ -2849,7 +2890,7 @@ static void desenharLoja(const InterfaceJogo *interfaceJogo)
     int indice;
     DrawRectangle(160, 55, 700, 545, (Color){ 12, 19, 27, 252 });
     DrawRectangleLines(160, 55, 700, 545, GOLD);
-    desenharTexto("CAMINHO COMERCIAL - LOJA DA ROTA", 275, 75, 22, GOLD);
+    desenharTexto("LOJA OPCIONAL - compras não avançam a rota", 225, 75, 22, GOLD);
     DrawRectangle(740, 72, 105, 38, (Color){ 60, 75, 87, 255 });
     desenharTexto("FECHAR [X]", 750, 84, 14, RAYWHITE);
     desenharTexto(TextFormat("Moedas de Ouro: %d | Saques realizados: %d (Inflação +%d%%)",
@@ -2877,7 +2918,7 @@ static void desenharLoja(const InterfaceJogo *interfaceJogo)
     DrawRectangleLines(185, 495, 200, 55, GOLD);
     desenharTexto("MOCHILA / USAR", 215, 514, 16, RAYWHITE);
     DrawRectangle(400, 495, 215, 55, (Color){ 145, 45, 38, 255 });
-    desenharTexto("SAQUEAR LOJA", 442, 514, 16, RAYWHITE);
+    desenharTexto("SAQUEAR / AVANÇAR", 414, 514, 16, RAYWHITE);
     DrawRectangle(630, 495, 195, 55, (Color){ 45, 115, 68, 255 });
     desenharTexto("SEGUIR VIAGEM", 658, 514, 16, RAYWHITE);
 }
@@ -2928,9 +2969,7 @@ static void desenharConfirmacaoEscolha(const InterfaceJogo *interfaceJogo,
         mensagem = texto;
     } else {
         titulo = "CONFIRMAR CAMINHO";
-        if (interfaceJogo->escolha_rota_pendente == 3) {
-            mensagem = "Entrar na loja desta rota?";
-        } else if (interfaceJogo->escolha_rota_pendente == 2) {
+        if (interfaceJogo->escolha_rota_pendente == 2) {
             mensagem = "Escolher o Caminho 2? (3 inimigos)";
         } else if (interfaceJogo->escolha_rota_pendente == 1 &&
                    interfaceJogo->rota_atual != NULL &&
@@ -3295,6 +3334,13 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
             desenharTexto("ENFRENTAR BARBA NEGRA", 515, 365, 22, GOLD);
             desenharTexto("Chefe Final (3000 HP | 2 Fases | 3 Turnos/Rodada)",
                           500, 400, 14, RAYWHITE);
+            if (etapaAtual == 3) {
+                DrawRectangle(510, 470, 300, 80, (Color){ 115, 77, 42, 255 });
+                DrawRectangleLines(510, 470, 300, 80, GOLD);
+                desenharTexto("LOJA OPCIONAL", 570, 483, 19, GOLD);
+                desenharTexto("Comprar sem avançar rota", 548, 510, 14, RAYWHITE);
+                desenharTexto("Saque: combate antes do chefe", 535, 531, 13, LIGHTGRAY);
+            }
         } else {
             DrawRectangle(440, 290, 260, 95, (Color){ 50, 88, 125, 255 });
             DrawRectangle(730, 290, 260, 95, (Color){ 70, 112, 75, 255 });
@@ -3305,9 +3351,9 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
             desenharTexto("CAMINHO 2 (3 Inimigos)", 748, 308, 19, RAYWHITE);
             desenharTexto("+1 Nível | +300 Ouros", 755, 336, 15, GOLD);
             desenharTexto("+50% Cura | +2 Itens", 755, 358, 15, LIGHTGRAY);
-            desenharTexto("CAMINHO 3: LOJA", 625, 433, 20, GOLD);
-            desenharTexto("3 Itens à venda (2 unid.)", 615, 461, 15, RAYWHITE);
-            desenharTexto("Saque: inimigos +100% status", 600, 483, 14, LIGHTGRAY);
+            desenharTexto("LOJA OPCIONAL", 625, 433, 20, GOLD);
+            desenharTexto("Comprar sem avançar a rota", 615, 461, 15, RAYWHITE);
+            desenharTexto("Saquear: combate e avança rota", 600, 483, 14, LIGHTGRAY);
         }
         DrawRectangle(90, 630, 190, 55,
                       interfaceJogo->popup_ativo == POPUP_MOCHILA_BUILDS ?

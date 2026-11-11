@@ -6,6 +6,7 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 int inflacaoLojasPercentual = 0;
 int moedasTripulacao = 300;
@@ -425,13 +426,19 @@ static int sortearIdRecompensaCombate(unsigned int *semente)
 bool aplicarRecompensaRota(TipoNoRota tipoRota, Combatente tripulacao[],
                            int totalTripulacao, ListaItens *inventario, int xpBase)
 {
-    static unsigned int sementeRecompensa = 987654321U;
+    static unsigned int sementeRecompensa = 0U;
     int niveis;
     int cura;
     int quantidadeItens;
     int indice;
     if (tripulacao == NULL || totalTripulacao <= 0 || inventario == NULL || xpBase < 0) {
         return false;
+    }
+    if (sementeRecompensa == 0U) {
+        sementeRecompensa = (unsigned int)time(NULL) ^ (unsigned int)clock();
+        if (sementeRecompensa == 0U) {
+            sementeRecompensa = 987654321U;
+        }
     }
     sementeRecompensa ^= (unsigned int)(moedasTripulacao * 31 + contadorSaques * 17 +
                                         contadorFugas * 13 + xpBase + 1);
@@ -445,12 +452,6 @@ bool aplicarRecompensaRota(TipoNoRota tipoRota, Combatente tripulacao[],
         moedasTripulacao += 300;
         cura = 50;
         quantidadeItens = 2;
-    } else if (tipoRota == ROTA_LOJA) {
-        niveis = 0;
-        cura = 0;
-        quantidadeItens = 2;
-        inflacaoLojasPercentual += 25;
-        contadorSaques++;
     } else {
         return false;
     }

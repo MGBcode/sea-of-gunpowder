@@ -772,6 +772,55 @@ static bool testarClassesEMecanicasCombate(void)
             return false;
         }
     }
+    {
+        Tabuleiro3x6 mapaStun = { 0 };
+        Combatente chefeStun;
+        Combatente inimigoStun;
+        EntradaIniciativa filaStun[MAX_ENTRADAS_INICIATIVA];
+        int totalStun;
+        int indiceStun = -1;
+        int turnosAtivosBoss = 0;
+        (void)criarChefeFinal(&chefeStun);
+        chefeStun.turnos_atordoado = 1;
+        chefeStun.linha = 1;
+        chefeStun.coluna = COLUNAS_TABULEIRO - 1;
+        mapaStun.celulas[chefeStun.linha][chefeStun.coluna] = &chefeStun;
+        totalStun = montarFilaTurnos(&mapaStun, filaStun);
+        if (totalStun != 3 ||
+            !avancarProximoTurno(filaStun, totalStun, &indiceStun, &mapaStun) ||
+            filaStun[indiceStun].indice_turno_boss != 1) {
+            fprintf(stderr, "Falha sanitaria: o stun do Barba Negra deve pular apenas um dos tres turnos da rodada.\n");
+            return false;
+        }
+        turnosAtivosBoss++;
+        if (!avancarProximoTurno(filaStun, totalStun, &indiceStun, &mapaStun) ||
+            filaStun[indiceStun].indice_turno_boss != 2 ||
+            chefeStun.turnos_atordoado != 0 ||
+            avancarProximoTurno(filaStun, totalStun, &indiceStun, &mapaStun)) {
+            fprintf(stderr, "Falha sanitaria: Barba Negra deve voltar a agir nos demais turnos da rodada após o stun.\n");
+            return false;
+        }
+        turnosAtivosBoss++;
+        if (turnosAtivosBoss != 2) {
+            fprintf(stderr, "Falha sanitaria: Barba Negra deve agir duas vezes na rodada em que foi stunado.\n");
+            return false;
+        }
+
+        (void)memset(&mapaStun, 0, sizeof(mapaStun));
+        (void)criarInimigoInicial(INIMIGO_GRUNT_ESPADA, &inimigoStun);
+        inimigoStun.turnos_atordoado = 1;
+        inimigoStun.linha = 1;
+        inimigoStun.coluna = 5;
+        mapaStun.celulas[1][5] = &inimigoStun;
+        totalStun = montarFilaTurnos(&mapaStun, filaStun);
+        indiceStun = -1;
+        if (totalStun != 1 ||
+            avancarProximoTurno(filaStun, totalStun, &indiceStun, &mapaStun) ||
+            inimigoStun.turnos_atordoado != 0 || !inimigoStun.turno_perdido) {
+            fprintf(stderr, "Falha sanitaria: o stun deve pular exatamente um turno de qualquer personagem.\n");
+            return false;
+        }
+    }
     return true;
 }
 
@@ -1124,6 +1173,19 @@ static bool executarTestesSanitarios(void)
         goto limpeza;
     }
     {
+        NoRota *etapa1 = avancarParaRota(raiz, 1);
+        NoRota *etapa2 = etapa1 != NULL ? avancarParaRota(etapa1, 1) : NULL;
+        NoRota *etapa3 = etapa2 != NULL ? avancarParaRota(etapa2, 1) : NULL;
+        if (raiz->loja == NULL || raiz->loja->tipo != ROTA_LOJA ||
+            etapa3 == NULL || etapa3->loja == NULL ||
+            etapa3->loja->tipo != ROTA_LOJA ||
+            etapa3->loja->caminho1 == NULL ||
+            etapa3->loja->caminho1->tipo != ROTA_CHEFE) {
+            fprintf(stderr, "Falha sanitaria: visita opcional a loja deve preservar a rota e o acesso ao chefe.\n");
+            goto limpeza;
+        }
+    }
+    {
         int fugasAntes = contadorFugas;
         novaRaiz = fugirDaAventura(raiz, &inventario, &dificuldade);
         if (novaRaiz == NULL || dificuldade != 2 || inventario.tamanho != 0 ||
@@ -1349,6 +1411,8 @@ static bool executarTestesSanitarios(void)
             int estA[3];
             int estB[3];
             int estC[3];
+            int estoqueRestante[3];
+            int quantidadesAntesSaque[3] = { 0, 0, 0 };
             int ouroCompra = 5000;
             Combatente pirataLoja;
             Combatente inimigoFrente;
@@ -1391,12 +1455,45 @@ static bool executarTestesSanitarios(void)
                     goto limpeza;
                 }
             }
+            {
+                int slot;
+                for (slot = 0; slot < 3; slot++) {
+                    NoItem *itemNo;
+                    estoqueRestante[slot] = estA[slot];
+                    for (itemNo = mochilaTeste.inicio; itemNo != NULL;
+                         itemNo = itemNo->proximo) {
+                        if (itemNo->item.id == lojaA[slot].id) {
+                            quantidadesAntesSaque[slot] += itemNo->item.quantidade;
+                        }
+                    }
+                }
+            }
             if (!saquearItensRestantesLoja(lojaA, estA, 3, &mochilaTeste) ||
                 estA[0] != 0 || estA[1] != 0 || estA[2] != 0) {
                 fprintf(stderr, "Falha sanitaria: saque dos itens restantes da loja.\n");
                 liberarListaItensCombatente(&pirataLoja.build_passivos);
                 liberarEstruturasJogo(NULL, &mochilaTeste, NULL);
                 goto limpeza;
+            }
+            {
+                int slot;
+                for (slot = 0; slot < 3; slot++) {
+                    int quantidadeDepois = 0;
+                    NoItem *itemNo;
+                    for (itemNo = mochilaTeste.inicio; itemNo != NULL;
+                         itemNo = itemNo->proximo) {
+                        if (itemNo->item.id == lojaA[slot].id) {
+                            quantidadeDepois += itemNo->item.quantidade;
+                        }
+                    }
+                    if (quantidadeDepois - quantidadesAntesSaque[slot] !=
+                        estoqueRestante[slot]) {
+                        fprintf(stderr, "Falha sanitaria: saque deve conceder exatamente o estoque restante da loja.\n");
+                        liberarListaItensCombatente(&pirataLoja.build_passivos);
+                        liberarEstruturasJogo(NULL, &mochilaTeste, NULL);
+                        goto limpeza;
+                    }
+                }
             }
             liberarListaItensCombatente(&pirataLoja.build_passivos);
             liberarEstruturasJogo(NULL, &mochilaTeste, NULL);
