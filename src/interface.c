@@ -410,6 +410,11 @@ static bool retanguloClicado(Rectangle retangulo, Vector2 mouse)
            CheckCollisionPointRec(mouse, retangulo);
 }
 
+static int posicaoYSlotBuild(int indice)
+{
+    return 432 + indice * 34;
+}
+
 // Converte o clique do mouse em uma célula válida do tabuleiro 3x6.
 static bool obterCelulaClicada(const InterfaceJogo *interfaceJogo, Vector2 mouse,
                                int *linha, int *coluna)
@@ -1777,13 +1782,18 @@ void atualizarInterface(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
                     itemIndice = 0;
                     for (item = alvoUso->build_passivos.inicio;
                          item != NULL; item = item->proximo) {
-                        Rectangle linhaItem = { 180.0f, 406.0f + (float)itemIndice * 36.0f,
-                                                650.0f, 33.0f };
+                        int posSlotY = posicaoYSlotBuild(itemIndice);
+                        Rectangle linhaItem = { 180.0f, (float)posSlotY,
+                                                650.0f, 31.0f };
                         if (retanguloClicado(linhaItem, mouse) &&
                             (interfaceJogo->estado == TELA_MAPA_ROTAS ||
                              interfaceJogo->fase_pre_combate_ativa)) {
-                            (void)desequiparItemPassivoBuild(
-                                inventario, alvoUso, item->item.id);
+                            if (!desequiparItemPassivoBuild(
+                                    inventario, alvoUso, item->item.id)) {
+                                TraceLog(LOG_WARNING,
+                                         "Não foi possível devolver o passivo %s à Mochila.",
+                                         item->item.nome);
+                            }
                             return;
                         }
                         itemIndice++;
@@ -2859,7 +2869,7 @@ static void desenharMochila(const InterfaceJogo *interfaceJogo)
         NoItem *passivo = selecionado->build_passivos.inicio;
         int slot;
         for (slot = 0; slot < MAX_ITENS_PASSIVOS; slot++) {
-            int posSlotY = 432 + slot * 34;
+            int posSlotY = posicaoYSlotBuild(slot);
             if (passivo != NULL) {
                 Color corPassivo = corRaridadeItem(passivo->item.raridade);
                 DrawRectangle(180, posSlotY, 650, 31, (Color){ 28, 45, 42, 255 });

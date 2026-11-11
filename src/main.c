@@ -1369,6 +1369,21 @@ static bool executarTestesSanitarios(void)
             liberarEstruturasJogo(NULL, &mochilaTeste, NULL);
             goto limpeza;
         }
+        if (!carregarInventarioSanitario(&mochilaTeste, &itens[5], 1) ||
+            !aplicarItemPassivoNoPirata(&mochilaTeste, &pA, itens[5].id) ||
+            pA.build_passivos.tamanho != 1 ||
+            !desequiparItemPassivoBuild(&mochilaTeste, &pA, itens[5].id) ||
+            mochilaTeste.tamanho != 1 || pA.build_passivos.tamanho != 0 ||
+            mochilaTeste.inicio == NULL ||
+            mochilaTeste.inicio->item.id != itens[5].id ||
+            !aplicarItemPassivoNoPirata(&mochilaTeste, &pB, itens[5].id) ||
+            mochilaTeste.tamanho != 0 || pB.build_passivos.tamanho != 2) {
+            fprintf(stderr, "Falha sanitaria: deve ser possível devolver e transferir um passivo de build com vários slots.\n");
+            liberarListaItensCombatente(&pA.build_passivos);
+            liberarListaItensCombatente(&pB.build_passivos);
+            liberarEstruturasJogo(NULL, &mochilaTeste, NULL);
+            goto limpeza;
+        }
         liberarListaItensCombatente(&pA.build_passivos);
         liberarListaItensCombatente(&pB.build_passivos);
         liberarEstruturasJogo(NULL, &mochilaTeste, NULL);
