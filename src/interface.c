@@ -455,6 +455,11 @@ static bool ehSobreviventeFixoFuga(const InterfaceJogo *interfaceJogo, int idPir
     return false;
 }
 
+static int posicaoXSlotFila(int slot)
+{
+    return 10 + slot * 50;
+}
+
 // Busca o pirata disponível cujo ID corresponde ao solicitado.
 static Combatente *pirataPorId(Combatente piratas[], int total, int id)
 {
@@ -538,7 +543,7 @@ static Combatente *obterAtorClicadoNaFila(const InterfaceJogo *interfaceJogo, Ve
         if (ator == NULL || !ator->vivo) {
             continue;
         }
-        posCardX = LARGURA_VIRTUAL - 16 - (slotVisivel + 1) * 50;
+        posCardX = posicaoXSlotFila(slotVisivel);
         if (retanguloClicado((Rectangle){ (float)posCardX, 7.0f, 45.0f, 45.0f },
                              mouse)) {
             return ator;
@@ -791,7 +796,7 @@ static void iniciarEncontro(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
                                      interfaceJogo->saque_em_andamento ||
                                      (*interfaceJogo->rota_atual)->tipo == ROTA_LOJA);
             inimigo->etapa_rota = etapaAtual;
-            if (indice == 0) {
+            if (indice == 0 && podeGerarEliteNaEtapa(etapaAtual, contadorFugas)) {
                 aplicarBuffElite(inimigo);
             }
             linha = celulasDireita[indice][0];
@@ -2999,7 +3004,7 @@ static void desenharFila(const InterfaceJogo *interfaceJogo)
     DrawRectangle(0, 0, LARGURA_VIRTUAL, 62, (Color){ 10, 17, 24, 230 });
     for (indice = 0; indice < interfaceJogo->total_iniciativa && slotVisivel < 9; indice++) {
         Combatente *ator = interfaceJogo->fila_iniciativa[indice].ator;
-        int posCardX = LARGURA_VIRTUAL - 16 - (slotVisivel + 1) * 50;
+        int posCardX = posicaoXSlotFila(slotVisivel);
         bool turnoAtivo = indice == interfaceJogo->indice_iniciativa;
         if (ator == NULL || !ator->vivo) {
             continue;
@@ -3021,9 +3026,9 @@ static void desenharFila(const InterfaceJogo *interfaceJogo)
 static void desenharHUDAtorAtivo(const InterfaceJogo *interfaceJogo)
 {
     const Combatente *ator;
-    Rectangle retrato = { 18.0f, 8.0f, 88.0f, 88.0f };
-    Rectangle barraHP = { 18.0f, 103.0f, 324.0f, 20.0f };
-    Rectangle barraEstamina = { 18.0f, 128.0f, 324.0f, 20.0f };
+    Rectangle retrato = { 928.0f, 8.0f, 88.0f, 88.0f };
+    Rectangle barraHP = { 928.0f, 103.0f, 324.0f, 20.0f };
+    Rectangle barraEstamina = { 928.0f, 128.0f, 324.0f, 20.0f };
     float proporcao;
     Color corGrupo;
     if (interfaceJogo == NULL) {
@@ -3033,7 +3038,7 @@ static void desenharHUDAtorAtivo(const InterfaceJogo *interfaceJogo)
     if ((ator == NULL || !ator->vivo) && interfaceJogo->fase_pre_combate_ativa) {
         ator = interfaceJogo->entidade_selecionada;
     }
-    DrawUIPanelCustom((Rectangle){ 10.0f, 4.0f, 350.0f, 150.0f },
+    DrawUIPanelCustom((Rectangle){ 920.0f, 4.0f, 350.0f, 150.0f },
                       interfaceJogo->texPainelDetalhes, (Color){ 12, 19, 27, 245 });
     corGrupo = ator != NULL && !ator->aliado ?
                (Color){ 135, 45, 38, 255 } : (Color){ 35, 75, 105, 255 };
@@ -3041,8 +3046,8 @@ static void desenharHUDAtorAtivo(const InterfaceJogo *interfaceJogo)
     DrawUIFrameCustom(retrato, interfaceJogo->texFrameRetrato);
     if (ator != NULL) {
         desenharTexto(TextFormat("%c", ator->nome[0] == '\0' ? '?' : ator->nome[0]),
-                      52, 34, 30, RAYWHITE);
-        desenharTexto(ator->nome, 118, 12, 16, ator->aliado ? SKYBLUE : ORANGE);
+                      962, 34, 30, RAYWHITE);
+        desenharTexto(ator->nome, 1028, 12, 16, ator->aliado ? SKYBLUE : ORANGE);
         DrawRectangleRec(converterBoundsVirtual(barraHP), (Color){ 35, 42, 45, 255 });
         proporcao = ator->vida_maxima > 0 ?
                     (float)ator->vida_atual / (float)ator->vida_maxima : 0.0f;
@@ -3055,8 +3060,11 @@ static void desenharHUDAtorAtivo(const InterfaceJogo *interfaceJogo)
             barraHP.x, barraHP.y, barraHP.width * proporcao, barraHP.height
         }), ator->vida_atual > ator->vida_maxima / 3 ? GREEN : RED);
         DrawRectangleLinesEx(barraHP, 1.0f, RAYWHITE);
+        DrawRectangleRec(converterBoundsVirtual((Rectangle){
+            932.0f, 104.0f, 132.0f, 18.0f
+        }), (Color){ 245, 245, 235, 225 });
         desenharTexto(TextFormat("HP: %d/%d", ator->vida_atual, ator->vida_maxima),
-                      25, 105, 12, RAYWHITE);
+                      935, 105, 12, BLACK);
         DrawRectangleRec(converterBoundsVirtual(barraEstamina), (Color){ 35, 42, 45, 255 });
         proporcao = ator->estamina_maxima > 0 ?
                     (float)ator->estamina_atual / (float)ator->estamina_maxima : 0.0f;
@@ -3070,11 +3078,14 @@ static void desenharHUDAtorAtivo(const InterfaceJogo *interfaceJogo)
             barraEstamina.width * proporcao, barraEstamina.height
         }), ator->aliado ? GOLD : SKYBLUE);
         DrawRectangleLinesEx(barraEstamina, 1.0f, RAYWHITE);
+        DrawRectangleRec(converterBoundsVirtual((Rectangle){
+            932.0f, 129.0f, 132.0f, 18.0f
+        }), (Color){ 245, 245, 235, 225 });
         desenharTexto(TextFormat("EST: %d/%d",
                                  ator->estamina_atual, ator->estamina_maxima),
-                      25, 130, 12, RAYWHITE);
+                      935, 130, 12, BLACK);
     } else {
-        desenharTexto("PRE-COMBATE", 118, 15, 16, GOLD);
+        desenharTexto("PRE-COMBATE", 1028, 15, 16, GOLD);
     }
 }
 
@@ -3335,18 +3346,25 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
         desenharHUDAtorAtivo(interfaceJogo);
         if (interfaceJogo->fase_pre_combate_ativa) {
             desenharTexto("PRÉ-COMBATE | Posicione a tripulação nas colunas 0 e 1.",
-                          390, 10, 14, GOLD);
+                          480, 10, 14, GOLD);
             desenharTexto("Selecione uma unidade para ver seus detalhes.",
-                          390, 34, 13, LIGHTGRAY);
+                          480, 34, 13, LIGHTGRAY);
         } else {
-            desenharTexto(TextFormat("Turno: %s | Ações restantes: %d",
+            desenharTexto(TextFormat("Turno: %s",
                                      interfaceJogo->ator_atual == NULL ?
-                                     "aguardando" : interfaceJogo->ator_atual->nome,
-                                     interfaceJogo->ator_atual == NULL ?
-                                     0 : interfaceJogo->ator_atual->acoes_basicas_restantes),
-                          390, 10, 13,
+                                     "aguardando" : interfaceJogo->ator_atual->nome),
+                          480, 10, 14,
                           (interfaceJogo->ator_atual != NULL &&
                            !interfaceJogo->ator_atual->aliado) ? ORANGE : GOLD);
+            DrawRectangleRec(converterBoundsVirtual((Rectangle){
+                700.0f, 5.0f, 180.0f, 40.0f
+            }), (Color){ 25, 38, 48, 245 });
+            DrawRectangleLinesEx((Rectangle){ 700.0f, 5.0f, 180.0f, 40.0f },
+                                 2.0f, GOLD);
+            desenharTexto(TextFormat("AÇÕES: %d",
+                                     interfaceJogo->ator_atual == NULL ?
+                                     0 : interfaceJogo->ator_atual->acoes_basicas_restantes),
+                          716, 12, 19, GOLD);
             if (interfaceJogo->log_combate[0] != '\0') {
                 desenharTexto(interfaceJogo->log_combate, 90, 578, 12, RAYWHITE);
             }
@@ -3365,11 +3383,11 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
                     }
                 }
                 if (gruntsVivos > 0) {
-                    DrawRectangle(390, 70, 650, 30, (Color){ 145, 42, 38, 245 });
-                    DrawRectangleLines(390, 70, 650, 30, GOLD);
-                    desenharTexto(TextFormat("BARBA NEGRA IMUNE: derrote os Grunts com Espada! Restantes: %d",
+                    DrawRectangle(480, 70, 410, 30, (Color){ 145, 42, 38, 245 });
+                    DrawRectangleLines(480, 70, 410, 30, GOLD);
+                    desenharTexto(TextFormat("BARBA NEGRA IMUNE: derrote os Grunts! Restantes: %d",
                                              gruntsVivos),
-                                  405, 77, 12, RAYWHITE);
+                                  490, 77, 12, RAYWHITE);
                 }
             }
         }

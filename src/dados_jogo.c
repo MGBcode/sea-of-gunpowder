@@ -530,6 +530,12 @@ void aplicarBuffElite(Combatente *inimigo)
     inimigo->estamina_atual += 3;
 }
 
+// Elites ficam disponíveis a partir da segunda rota escolhida ou após uma fuga.
+bool podeGerarEliteNaEtapa(int etapa, int fugasNaRun)
+{
+    return etapa >= 2 || fugasNaRun > 0;
+}
+
 // Aplica o multiplicador de dificuldade da run.
 void escalonarInimigoPorDificuldade(Combatente *inimigo, int nivelDificuldade)
 {

@@ -575,11 +575,9 @@ static int calcularDanoFinal(Tabuleiro3x6 *mapa, Combatente *atacante,
     }
     if (atacante->aliado && atacante->classe == CLASSE_GAVEA &&
         (atacante->passiva_aprimorada || atacante->nivel >= 4)) {
-        int quadradosMaisPerto = 6 - distancia;
-        if (quadradosMaisPerto < 1) {
-            quadradosMaisPerto = 1;
+        if (distancia >= 1 && distancia <= 3) {
+            somaPctBuffs += (4 - distancia) * 5;
         }
-        somaPctBuffs += quadradosMaisPerto * 10;
     }
     if (atacante->aliado && adjacenteCapitaoAprimorado(mapa, atacante)) {
         somaPctBuffs += 20;

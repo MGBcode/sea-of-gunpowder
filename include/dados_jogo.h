@@ -35,6 +35,7 @@ void escalonarInimigoPorDificuldade(Combatente *inimigo, int nivelDificuldade);
 void escalonarInimigoPorRota(Combatente *inimigo, TipoNoRota tipoRota, int etapa,
                              int fugasNaRun, bool saqueouLoja);
 void aplicarBuffElite(Combatente *inimigo);
+bool podeGerarEliteNaEtapa(int etapa, int fugasNaRun);
 // Gera inimigos determinísticos para a rota e retorna quantos foram criados.
 int sortearInimigosRota(TipoNoRota tipoRota, unsigned int semente,
                         int indices[], int capacidade);

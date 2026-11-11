@@ -85,6 +85,36 @@ static bool testarClassesEMecanicasCombate(void)
         fprintf(stderr, "Falha sanitaria: Gavea Nv 4 deve ter 7 de estamina.\n");
         return false;
     }
+    {
+        int distancia;
+        static const int danoEsperado[] = { 115, 110, 105 };
+        for (distancia = 1; distancia <= 3; distancia++) {
+            Combatente atacante;
+            Combatente alvo;
+            (void)memset(&mapa, 0, sizeof(mapa));
+            (void)criarPirataInicial(CLASSE_GAVEA, &atacante);
+            (void)subirNivelPirata(&atacante, 3);
+            atacante.passiva_aprimorada = true;
+            atacante.linha = 1;
+            atacante.coluna = 0;
+            atacante.habilidades[0].precisao = 100;
+            atacante.habilidades[0].dano_min = 100;
+            atacante.habilidades[0].dano_max = 100;
+            (void)criarInimigoInicial(INIMIGO_GRUNT_ESPADA, &alvo);
+            alvo.vida_maxima = 10000;
+            alvo.vida_atual = 10000;
+            alvo.defesa = 0;
+            alvo.linha = 1;
+            alvo.coluna = distancia;
+            mapa.celulas[1][0] = &atacante;
+            mapa.celulas[1][distancia] = &alvo;
+            executarAtaqueOuHabilidade(&mapa, &atacante, 0, 1, distancia);
+            if (alvo.vida_atual != 10000 - danoEsperado[distancia - 1]) {
+                fprintf(stderr, "Falha sanitaria: passiva do Gavea deve conceder 15%%, 10%% e 5%% de dano a 1, 2 e 3 casas.\n");
+                return false;
+            }
+        }
+    }
 
     (void)subirNivelPirata(&bucaneiro, 1);
     if (bucaneiro.estamina_maxima != 7) {
@@ -660,6 +690,12 @@ static bool testarClassesEMecanicasCombate(void)
     }
     {
         Combatente elite;
+        if (podeGerarEliteNaEtapa(1, 0) ||
+            !podeGerarEliteNaEtapa(2, 0) ||
+            !podeGerarEliteNaEtapa(1, 1)) {
+            fprintf(stderr, "Falha sanitaria: elites só surgem a partir da segunda rota ou após fuga.\n");
+            return false;
+        }
         if (!criarInimigoInicial(INIMIGO_GRUNT_ESPADA, &elite)) {
             fprintf(stderr, "Falha sanitaria: criacao de elite.\n");
             return false;
