@@ -1311,9 +1311,46 @@ static Texture2D carregarTexturaOpcional(const char *caminho)
     return textura;
 }
 
+// Retorna a ilustração base correspondente à classe de um pirata jogável.
+static Texture2D obterSpritePirata(const InterfaceJogo *interfaceJogo,
+                                   const Combatente *unidade)
+{
+    if (interfaceJogo == NULL || unidade == NULL || !unidade->aliado ||
+        unidade->classe < CLASSE_BUCANEIRO || unidade->classe > CLASSE_GAVEA) {
+        return (Texture2D){ 0 };
+    }
+    return interfaceJogo->spritesPiratas[(int)unidade->classe];
+}
+
+// Desenha a ilustração em coordenadas virtuais sem distorcer sua proporção.
+static void desenharSpritePirata(Texture2D textura, Rectangle bounds)
+{
+    float proporcaoTextura;
+    float proporcaoBounds;
+    Rectangle destino = bounds;
+    if (textura.id == 0 || textura.width <= 0 || textura.height <= 0 ||
+        bounds.width <= 0.0f || bounds.height <= 0.0f) {
+        return;
+    }
+    proporcaoTextura = (float)textura.width / (float)textura.height;
+    proporcaoBounds = bounds.width / bounds.height;
+    if (proporcaoTextura > proporcaoBounds) {
+        destino.height = bounds.width / proporcaoTextura;
+        destino.y += (bounds.height - destino.height) * 0.5f;
+    } else {
+        destino.width = bounds.height * proporcaoTextura;
+        destino.x += (bounds.width - destino.width) * 0.5f;
+    }
+    desenharTexturaBounds(textura, destino);
+}
+
 // Inicializa a janela em 1920x1080 (1080p), o framebuffer 1080p e a fonte TrueType de alta nitidez.
 void inicializarInterface(InterfaceJogo *interfaceJogo)
 {
+    static const char *arquivosSpritesPiratas[5] = {
+        "bucaneiroBase.png", "Timoneiro.png", "cozinheiroBase.png",
+        "capitaoBase.png", "gaveaBase.png"
+    };
     int codepoints[224];
     int indice;
     int fundosCarregados = 0;
@@ -1361,6 +1398,12 @@ void inicializarInterface(InterfaceJogo *interfaceJogo)
         }
     } else {
         TraceLog(LOG_ERROR, "Arquivo assets/textures/bg_mar.png nao encontrado.");
+    }
+    for (indice = 0; indice < 5; indice++) {
+        char caminhoSprite[160];
+        (void)snprintf(caminhoSprite, sizeof(caminhoSprite), "assets/sprites/%s",
+                       arquivosSpritesPiratas[indice]);
+        interfaceJogo->spritesPiratas[indice] = carregarTexturaOpcional(caminhoSprite);
     }
     for (indice = 0; indice < 224; indice++) {
         codepoints[indice] = 32 + indice;
@@ -2725,27 +2768,30 @@ void desenharTelaSelecaoGrupo(InterfaceJogo *interfaceJogo,
         DrawRectangle(cardX, cardY, 350, 180, (Color){ 42, 63, 76, 255 });
         DrawRectangleLinesEx((Rectangle){ (float)cardX, (float)cardY, 350, 180 },
                              selecionado ? 4.0f : 2.0f, borda);
-        desenharTexto(piratasDisponiveis[indice].nome, cardX + 16, cardY + 14, 20, RAYWHITE);
+        desenharSpritePirata(obterSpritePirata(interfaceJogo, &piratasDisponiveis[indice]),
+                             (Rectangle){ (float)(cardX + 12), (float)(cardY + 24),
+                                          72.0f, 108.0f });
+        desenharTexto(piratasDisponiveis[indice].nome, cardX + 96, cardY + 14, 20, RAYWHITE);
         if (piratasDisponiveis[indice].classe == CLASSE_COZINHEIRO) {
             desenharTexto(TextFormat("HP %d | Cura Garantida | Vel %d",
                                      piratasDisponiveis[indice].vida_maxima,
                                      piratasDisponiveis[indice].velocidade),
-                          cardX + 16, cardY + 52, 16, LIGHTGRAY);
+                          cardX + 96, cardY + 52, 14, LIGHTGRAY);
         } else {
             desenharTexto(TextFormat("HP %d | Precisão %d%% | Vel %d",
                                      piratasDisponiveis[indice].vida_maxima,
                                      piratasDisponiveis[indice].precisao_melee,
                                      piratasDisponiveis[indice].velocidade),
-                          cardX + 16, cardY + 52, 16, LIGHTGRAY);
+                          cardX + 96, cardY + 52, 14, LIGHTGRAY);
         }
         desenharTexto(TextFormat("Estamina %d | Nível %d | Passivos %d",
                                  piratasDisponiveis[indice].estamina_maxima,
                                  piratasDisponiveis[indice].nivel,
                                  piratasDisponiveis[indice].build_passivos.tamanho),
-                      cardX + 16, cardY + 84, 16, LIGHTGRAY);
-        desenharTexto(sobreviventeFixo ? "SOBREVIVENTE (MANTIDO)" :
-                      (selecionado ? "SELECIONADO" : "Clique para selecionar"),
-                      cardX + 16, cardY + 144, 15,
+                      cardX + 96, cardY + 82, 14, LIGHTGRAY);
+        desenharTexto(sobreviventeFixo ? "MANTIDO" :
+                      (selecionado ? "SELECIONADO" : "Selecionar"),
+                      cardX + 96, cardY + 144, 13,
                       sobreviventeFixo ? SKYBLUE : (selecionado ? GOLD : GRAY));
         DrawRectangle(cardX + 230, cardY + 138, 108, 32, (Color){ 28, 42, 54, 255 });
         DrawRectangleLines(cardX + 230, cardY + 138, 108, 32, GOLD);
@@ -3226,6 +3272,9 @@ static void desenharTabuleiro(const InterfaceJogo *interfaceJogo,
             if (unidade != NULL && unidade->vivo) {
                 desenharTexto(unidade->nome, posX + 8, posY + 8, 14,
                               unidade->aliado ? SKYBLUE : ORANGE);
+                desenharSpritePirata(obterSpritePirata(interfaceJogo, unidade),
+                                     (Rectangle){ (float)(posX + 108), (float)(posY + 32),
+                                                  62.0f, 92.0f });
                 if (unidade->eh_elite) {
                     DrawRectangle(posX + 124, posY + 6, 48, 20, (Color){ 145, 42, 38, 255 });
                     desenharTexto("ELITE", posX + 130, posY + 9, 12, GOLD);
@@ -3238,6 +3287,7 @@ static void desenharTabuleiro(const InterfaceJogo *interfaceJogo,
                     desenharTexto("DESCANSANDO", posX + 8, posY + 70, 11, YELLOW);
                 }
                 desenharIndicadoresStatusUnidade(unidade, posX + 8, posY + 90,
+                                                 unidade->aliado ? 96 :
                                                  interfaceJogo->largura_celula - 16);
                 if (unidade == interfaceJogo->ator_atual &&
                     !interfaceJogo->fase_pre_combate_ativa) {
@@ -3577,6 +3627,12 @@ void descarregarInterface(InterfaceJogo *interfaceJogo)
 {
     if (interfaceJogo != NULL) {
         int indice;
+        for (indice = 0; indice < 5; indice++) {
+            if (interfaceJogo->spritesPiratas[indice].id != 0) {
+                UnloadTexture(interfaceJogo->spritesPiratas[indice]);
+                interfaceJogo->spritesPiratas[indice] = (Texture2D){ 0 };
+            }
+        }
         if (interfaceJogo->bgMar.id != 0) {
             UnloadTexture(interfaceJogo->bgMar);
             interfaceJogo->bgMar = (Texture2D){ 0 };

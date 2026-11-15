@@ -56,6 +56,8 @@ make clean
 ## Personalização Visual (Opcional)
 As texturas abaixo são carregadas de `assets/textures/` quando presentes. Se uma textura de UI não existir, os painéis, molduras e botões usam primitivas Raylib. Os fundos de combate aceitam até cinco arquivos (`bg_combate_1.png` a `bg_combate_5.png`); sem nenhum deles, `bg_navio.png` é usado como pool. O chefe pode usar `bg_boss.png`; se ausente, o fundo da batalha é `DARKBLUE`.
 
+Os retratos dos piratas jogáveis são carregados de `assets/sprites/`: `bucaneiroBase.png`, `Timoneiro.png`, `cozinheiroBase.png`, `capitaoBase.png` e `gaveaBase.png`. Se algum arquivo faltar, o jogo mantém os textos e a interface sem aquele retrato.
+
 - `tex_btn_padrao.png`
 - `tex_frame_retrato.png`
 - `tex_painel_detalhes.png`
