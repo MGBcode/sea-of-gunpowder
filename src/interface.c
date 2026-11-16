@@ -30,6 +30,10 @@ static const InterfaceJogo *interfaceRenderizada;
 static RenderTexture2D canvasVirtual;
 static bool canvasCarregado = false;
 
+static void registrarPoseAcaoUnidade(InterfaceJogo *interfaceJogo,
+                                     Combatente *unidade, int indiceHabilidade,
+                                     int linhaAlvo, int colunaAlvo);
+
 extern void *glfwGetCurrentContext(void);
 extern void glfwGetWindowSize(void *window, int *width, int *height);
 
@@ -1010,6 +1014,8 @@ static void executarPassoTurnoInimigo(InterfaceJogo *interfaceJogo, Tabuleiro3x6
         }
         executarAtaqueOuHabilidade(mapa, inimigo, escolha.indice_habilidade,
                                    escolha.linha_alvo, escolha.coluna_alvo);
+        registrarPoseAcaoUnidade(interfaceJogo, inimigo, escolha.indice_habilidade,
+                                 escolha.linha_alvo, escolha.coluna_alvo);
         danoTotal = somarUltimoDanoTabuleiro(mapa);
         curaTotal = somarUltimaCuraTabuleiro(mapa);
         inimigo->acoes_basicas_restantes--;
@@ -1322,59 +1328,116 @@ static Texture2D carregarTexturaOpcional(const char *caminho)
     return textura;
 }
 
-// Retorna a ilustração base correspondente à classe de um pirata jogável.
-static Texture2D obterSpritePirata(const InterfaceJogo *interfaceJogo,
+// Seleciona a pose visual do pirata ou Grunt conforme seu estado atual.
+static Texture2D obterSpriteUnidade(const InterfaceJogo *interfaceJogo,
                                    const Combatente *unidade)
 {
-    int classe;
+    int indiceSprite;
     int pose = SPRITE_PIRATA_BASE;
     Texture2D textura;
-    if (interfaceJogo == NULL || unidade == NULL || !unidade->aliado ||
-        unidade->classe < CLASSE_BUCANEIRO || unidade->classe > CLASSE_GAVEA) {
+    if (interfaceJogo == NULL || unidade == NULL) {
         return (Texture2D){ 0 };
     }
-    classe = (int)unidade->classe;
+    if (unidade->aliado) {
+        if (unidade->classe < CLASSE_BUCANEIRO || unidade->classe > CLASSE_GAVEA) {
+            return (Texture2D){ 0 };
+        }
+        indiceSprite = (int)unidade->classe;
+        if (unidade->em_descanso) {
+            pose = SPRITE_PIRATA_DESCANSO;
+        } else if (interfaceJogo->unidade_em_animacao == unidade &&
+                   interfaceJogo->timer_pose_acao_unidade > 0.0f &&
+                   interfaceJogo->pose_acao_sprite_unidade >= SPRITE_PIRATA_ACAO_0 &&
+                   interfaceJogo->pose_acao_sprite_unidade < TOTAL_POSES_SPRITES_PIRATA) {
+            pose = interfaceJogo->pose_acao_sprite_unidade;
+        }
+        textura = interfaceJogo->spritesPiratas[indiceSprite][pose];
+        if (textura.id == 0 && pose != SPRITE_PIRATA_BASE) {
+            textura = interfaceJogo->spritesPiratas[indiceSprite][SPRITE_PIRATA_BASE];
+        }
+        return textura;
+    }
+
+    if (unidade->tipo_inimigo < INIMIGO_GRUNT_ESPADA ||
+        unidade->tipo_inimigo > INIMIGO_MARUJO_GORDO) {
+        return (Texture2D){ 0 };
+    }
+    indiceSprite = (int)unidade->tipo_inimigo;
     if (unidade->em_descanso) {
         pose = SPRITE_PIRATA_DESCANSO;
-    } else if (interfaceJogo->pirata_em_animacao == unidade &&
-               interfaceJogo->timer_pose_acao_pirata > 0.0f &&
-               interfaceJogo->pose_acao_sprite_pirata >= SPRITE_PIRATA_ACAO_0 &&
-               interfaceJogo->pose_acao_sprite_pirata < TOTAL_POSES_SPRITES_PIRATA) {
-        pose = interfaceJogo->pose_acao_sprite_pirata;
+    } else if (interfaceJogo->unidade_em_animacao == unidade &&
+               interfaceJogo->timer_pose_acao_unidade > 0.0f &&
+               interfaceJogo->pose_acao_sprite_unidade >= SPRITE_PIRATA_ACAO_0 &&
+               interfaceJogo->pose_acao_sprite_unidade <= SPRITE_PIRATA_ACAO_1) {
+        pose = interfaceJogo->pose_acao_sprite_unidade;
     }
-    textura = interfaceJogo->spritesPiratas[classe][pose];
+    textura = interfaceJogo->spritesInimigos[indiceSprite][pose];
     if (textura.id == 0 && pose != SPRITE_PIRATA_BASE) {
-        textura = interfaceJogo->spritesPiratas[classe][SPRITE_PIRATA_BASE];
+        textura = interfaceJogo->spritesInimigos[indiceSprite][SPRITE_PIRATA_BASE];
     }
     return textura;
 }
 
+// Os cards da seleção sempre representam piratas, mesmo quando aliado está falso no estado da run.
+static Texture2D obterSpriteBasePirata(const InterfaceJogo *interfaceJogo,
+                                       const Combatente *pirata)
+{
+    if (interfaceJogo == NULL || pirata == NULL ||
+        pirata->classe < CLASSE_BUCANEIRO || pirata->classe > CLASSE_GAVEA) {
+        return (Texture2D){ 0 };
+    }
+    return interfaceJogo->spritesPiratas[(int)pirata->classe][SPRITE_PIRATA_BASE];
+}
+
 // Mantém a pose da habilidade no tabuleiro por um segundo.
-static void registrarPoseAcaoPirata(InterfaceJogo *interfaceJogo,
-                                    Combatente *unidade, int indiceHabilidade,
-                                    int linhaAlvo, int colunaAlvo)
+static void registrarPoseAcaoUnidade(InterfaceJogo *interfaceJogo,
+                                     Combatente *unidade, int indiceHabilidade,
+                                     int linhaAlvo, int colunaAlvo)
 {
     int pose;
-    if (interfaceJogo == NULL || unidade == NULL || !unidade->aliado ||
-        unidade->classe < CLASSE_BUCANEIRO || unidade->classe > CLASSE_GAVEA ||
-        indiceHabilidade < 0 || indiceHabilidade >= 3) {
+    if (interfaceJogo == NULL || unidade == NULL || indiceHabilidade < 0) {
         return;
     }
-    pose = SPRITE_PIRATA_ACAO_0 + indiceHabilidade;
-    if (unidade->classe == CLASSE_CAPITAO && indiceHabilidade == 0 &&
-        abs(unidade->linha - linhaAlvo) + abs(unidade->coluna - colunaAlvo) == 2) {
-        pose = SPRITE_PIRATA_CAPITAO_TIRO;
-    } else if (unidade->classe == CLASSE_COZINHEIRO && indiceHabilidade == 0 &&
-               unidade->linha == linhaAlvo && unidade->coluna == colunaAlvo) {
-        pose = SPRITE_PIRATA_COZINHEIRO_COMENDO;
+    if (unidade->aliado) {
+        if (unidade->classe < CLASSE_BUCANEIRO || unidade->classe > CLASSE_GAVEA ||
+            indiceHabilidade >= 3) {
+            return;
+        }
+        pose = SPRITE_PIRATA_ACAO_0 + indiceHabilidade;
+        if (unidade->classe == CLASSE_CAPITAO && indiceHabilidade == 0 &&
+            abs(unidade->linha - linhaAlvo) + abs(unidade->coluna - colunaAlvo) == 2) {
+            pose = SPRITE_PIRATA_CAPITAO_TIRO;
+        } else if (unidade->classe == CLASSE_COZINHEIRO && indiceHabilidade == 0 &&
+                   unidade->linha == linhaAlvo && unidade->coluna == colunaAlvo) {
+            pose = SPRITE_PIRATA_COZINHEIRO_COMENDO;
+        }
+    } else {
+        switch (unidade->tipo_inimigo) {
+        case INIMIGO_GRUNT_ESPADA:
+        case INIMIGO_ATIRADOR_MAGRELO:
+            if (indiceHabilidade != 0) {
+                return;
+            }
+            pose = SPRITE_PIRATA_ACAO_0;
+            break;
+        case INIMIGO_GRUNT_PISTOLA:
+        case INIMIGO_MARUJO_GORDO:
+            if (indiceHabilidade > 1) {
+                return;
+            }
+            pose = SPRITE_PIRATA_ACAO_0 + indiceHabilidade;
+            break;
+        default:
+            return;
+        }
     }
-    interfaceJogo->pirata_em_animacao = unidade;
-    interfaceJogo->pose_acao_sprite_pirata = pose;
-    interfaceJogo->timer_pose_acao_pirata = 1.0f;
+    interfaceJogo->unidade_em_animacao = unidade;
+    interfaceJogo->pose_acao_sprite_unidade = pose;
+    interfaceJogo->timer_pose_acao_unidade = 1.0f;
 }
 
 // Desenha a ilustração em coordenadas virtuais sem distorcer sua proporção.
-static void desenharSpritePirata(Texture2D textura, Rectangle bounds)
+static void desenharSpriteUnidade(Texture2D textura, Rectangle bounds)
 {
     float proporcaoTextura;
     float proporcaoBounds;
@@ -1398,6 +1461,16 @@ static void desenharSpritePirata(Texture2D textura, Rectangle bounds)
 // Inicializa a janela em 1920x1080 (1080p), o framebuffer 1080p e a fonte TrueType de alta nitidez.
 void inicializarInterface(InterfaceJogo *interfaceJogo)
 {
+    static const char *arquivosSpritesInimigos[4][4] = {
+        { "gruntEspadaBase.png", "gruntEspadaDescanso.png",
+          "gruntEspadaCorte.png", NULL },
+        { "gruntPistolaBase.png", "gruntPistolaDescanso.png",
+          "gruntPistolaTiro.png", "gruntPistolaGranada.png" },
+        { "AtiradorMagreloBase.png", "AtiradorMagreloDescanso.png",
+          "AtiradorMagreloTiro.png", NULL },
+        { "MarujoGordoBase.png", "MarujoGordoDescanso.png",
+          "MarujoGordoTiro.png", "MarujoGordoCura.png" }
+    };
     static const char *arquivosSpritesPiratas[5][TOTAL_POSES_SPRITES_PIRATA] = {
         { "bucaneiroBase.png", "bucaneiroDescanso.png", "bucaneiroCorte.png",
           "bucaneiroPocketSand.png", "bucaneiroUlt.png", NULL, NULL },
@@ -1470,6 +1543,19 @@ void inicializarInterface(InterfaceJogo *interfaceJogo)
             (void)snprintf(caminhoSprite, sizeof(caminhoSprite), "assets/sprites/%s",
                            arquivosSpritesPiratas[indice][pose]);
             interfaceJogo->spritesPiratas[indice][pose] =
+                carregarTexturaOpcional(caminhoSprite);
+        }
+    }
+    for (indice = 0; indice < 4; indice++) {
+        for (pose = 0; pose < 4; pose++) {
+            char caminhoSprite[160];
+            if (arquivosSpritesInimigos[indice][pose] == NULL) {
+                interfaceJogo->spritesInimigos[indice][pose] = (Texture2D){ 0 };
+                continue;
+            }
+            (void)snprintf(caminhoSprite, sizeof(caminhoSprite), "assets/sprites/%s",
+                           arquivosSpritesInimigos[indice][pose]);
+            interfaceJogo->spritesInimigos[indice][pose] =
                 carregarTexturaOpcional(caminhoSprite);
         }
     }
@@ -1578,12 +1664,12 @@ void atualizarInterface(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
             interfaceJogo->timer_indicador_dano = 0.0f;
         }
     }
-    if (interfaceJogo->timer_pose_acao_pirata > 0.0f) {
-        interfaceJogo->timer_pose_acao_pirata -= deltaTempo;
-        if (interfaceJogo->timer_pose_acao_pirata <= 0.0f) {
-            interfaceJogo->timer_pose_acao_pirata = 0.0f;
-            interfaceJogo->pirata_em_animacao = NULL;
-            interfaceJogo->pose_acao_sprite_pirata = -1;
+    if (interfaceJogo->timer_pose_acao_unidade > 0.0f) {
+        interfaceJogo->timer_pose_acao_unidade -= deltaTempo;
+        if (interfaceJogo->timer_pose_acao_unidade <= 0.0f) {
+            interfaceJogo->timer_pose_acao_unidade = 0.0f;
+            interfaceJogo->unidade_em_animacao = NULL;
+            interfaceJogo->pose_acao_sprite_unidade = -1;
         }
     }
     rodaMouse = GetMouseWheelMove();
@@ -2215,8 +2301,8 @@ void atualizarInterface(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
                 executarAtaqueOuHabilidade(mapa, interfaceJogo->ator_atual, habilidade,
                                            linha, coluna);
                 if (interfaceJogo->ator_atual->estamina_atual < estaminaAntes) {
-                    registrarPoseAcaoPirata(interfaceJogo, interfaceJogo->ator_atual,
-                                            habilidade, linha, coluna);
+                    registrarPoseAcaoUnidade(interfaceJogo, interfaceJogo->ator_atual,
+                                             habilidade, linha, coluna);
                     int danoTotal = somarUltimoDanoTabuleiro(mapa);
                     int curaTotal = somarUltimaCuraTabuleiro(mapa);
                     if (danoTotal > 0 || curaTotal > 0) {
@@ -2846,9 +2932,10 @@ void desenharTelaSelecaoGrupo(InterfaceJogo *interfaceJogo,
         DrawRectangle(cardX, cardY, 350, 180, (Color){ 42, 63, 76, 255 });
         DrawRectangleLinesEx((Rectangle){ (float)cardX, (float)cardY, 350, 180 },
                              selecionado ? 4.0f : 2.0f, borda);
-        desenharSpritePirata(obterSpritePirata(interfaceJogo, &piratasDisponiveis[indice]),
-                             (Rectangle){ (float)(cardX + 12), (float)(cardY + 24),
-                                          72.0f, 108.0f });
+        desenharSpriteUnidade(obterSpriteBasePirata(interfaceJogo,
+                                                    &piratasDisponiveis[indice]),
+                              (Rectangle){ (float)(cardX + 12), (float)(cardY + 24),
+                                           72.0f, 108.0f });
         desenharTexto(piratasDisponiveis[indice].nome, cardX + 96, cardY + 14, 20, RAYWHITE);
         if (piratasDisponiveis[indice].classe == CLASSE_COZINHEIRO) {
             desenharTexto(TextFormat("HP %d | Cura Garantida | Vel %d",
@@ -3350,9 +3437,9 @@ static void desenharTabuleiro(const InterfaceJogo *interfaceJogo,
             if (unidade != NULL && unidade->vivo) {
                 desenharTexto(unidade->nome, posX + 8, posY + 8, 14,
                               unidade->aliado ? SKYBLUE : ORANGE);
-                desenharSpritePirata(obterSpritePirata(interfaceJogo, unidade),
-                                     (Rectangle){ (float)(posX + 108), (float)(posY + 32),
-                                                  62.0f, 92.0f });
+                desenharSpriteUnidade(obterSpriteUnidade(interfaceJogo, unidade),
+                                      (Rectangle){ (float)(posX + 108), (float)(posY + 32),
+                                                   62.0f, 92.0f });
                 if (unidade->eh_elite) {
                     DrawRectangle(posX + 124, posY + 6, 48, 20, (Color){ 145, 42, 38, 255 });
                     desenharTexto("ELITE", posX + 130, posY + 9, 12, GOLD);
@@ -3711,6 +3798,15 @@ void descarregarInterface(InterfaceJogo *interfaceJogo)
                 if (interfaceJogo->spritesPiratas[indice][pose].id != 0) {
                     UnloadTexture(interfaceJogo->spritesPiratas[indice][pose]);
                     interfaceJogo->spritesPiratas[indice][pose] = (Texture2D){ 0 };
+                }
+            }
+        }
+        for (indice = 0; indice < 4; indice++) {
+            int pose;
+            for (pose = 0; pose < 4; pose++) {
+                if (interfaceJogo->spritesInimigos[indice][pose].id != 0) {
+                    UnloadTexture(interfaceJogo->spritesInimigos[indice][pose]);
+                    interfaceJogo->spritesInimigos[indice][pose] = (Texture2D){ 0 };
                 }
             }
         }
