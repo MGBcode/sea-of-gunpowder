@@ -14,6 +14,16 @@
 #define LARGURA_RENDER_1080P 1920
 #define ALTURA_RENDER_1080P 1080
 #define ESCALA_1080P(v) (((float)(v)) * 1.5f)
+#define CHARACTER_VISUAL_SCALE 1.15f
+#define CHARACTER_BASE_HEIGHT_RATIO 0.80f
+#define CHARACTER_STATUS_WIDTH_RATIO 0.86f
+#define CHARACTER_BASE_STATUS_HEIGHT 46.0f
+#define CHARACTER_BASE_FONT_SIZE 9.0f
+#define CHARACTER_BASE_NAME_HEIGHT 13.0f
+#define CHARACTER_VERTICAL_OFFSET -15.0f
+#define CHARACTER_NAME_GAP 4.0f
+#define CHARACTER_STATUS_GAP 2.0f
+#define BOTTOM_SCREEN_MARGIN 12.0f
 
 enum {
     SPRITE_PIRATA_BASE,
@@ -27,12 +37,46 @@ enum {
 };
 
 static const InterfaceJogo *interfaceRenderizada;
+static InterfaceJogo *gerenciadorFundoCombate;
 static RenderTexture2D canvasVirtual;
 static bool canvasCarregado = false;
 
 static void registrarPoseAcaoUnidade(InterfaceJogo *interfaceJogo,
                                      Combatente *unidade, int indiceHabilidade,
                                      int linhaAlvo, int colunaAlvo);
+static void desenharSpriteUnidade(Texture2D textura, Rectangle bounds);
+static void desenharTextoCentralizadoContornado(const char *texto, Rectangle bounds,
+                                                int tamanho, Color cor);
+static void desenharBarraStatusCombatente(const InterfaceJogo *interfaceJogo,
+                                          const Combatente *unidade,
+                                          Rectangle bounds, int tamanhoTexto);
+
+void SelectCombatBackground(bool isBoss)
+{
+    int indice;
+    if (gerenciadorFundoCombate == NULL) {
+        return;
+    }
+    gerenciadorFundoCombate->bgBossAtivo = isBoss;
+    if (isBoss) {
+        gerenciadorFundoCombate->bgCombateAtualIdx = -1;
+        return;
+    }
+    if (gerenciadorFundoCombate->qtdBgCombate <= 0) {
+        gerenciadorFundoCombate->bgCombateAtualIdx = -1;
+        return;
+    }
+    indice = GetRandomValue(0, gerenciadorFundoCombate->qtdBgCombate - 1);
+    if (gerenciadorFundoCombate->qtdBgCombate > 1 &&
+        indice == gerenciadorFundoCombate->bgCombateAnteriorIdx) {
+        indice = GetRandomValue(0, gerenciadorFundoCombate->qtdBgCombate - 2);
+        if (indice >= gerenciadorFundoCombate->bgCombateAnteriorIdx) {
+            indice++;
+        }
+    }
+    gerenciadorFundoCombate->bgCombateAtualIdx = indice;
+    gerenciadorFundoCombate->bgCombateAnteriorIdx = indice;
+}
 
 extern void *glfwGetCurrentContext(void);
 extern void glfwGetWindowSize(void *window, int *width, int *height);
@@ -144,7 +188,7 @@ static void desenharFundoEstado(const InterfaceJogo *interfaceJogo)
             textura = interfaceJogo->bgBoss;
         } else if (interfaceJogo->bgCombateAtualIdx >= 0 &&
                    interfaceJogo->bgCombateAtualIdx < interfaceJogo->qtdBgCombate &&
-                   interfaceJogo->bgCombateAtualIdx < 5) {
+                   interfaceJogo->bgCombateAtualIdx < 6) {
             textura = interfaceJogo->bgCombatePool[interfaceJogo->bgCombateAtualIdx];
         }
     } else {
@@ -174,7 +218,7 @@ static Texture2D obterTexturaFundoCombate(const InterfaceJogo *interfaceJogo)
     }
     if (interfaceJogo->bgCombateAtualIdx >= 0 &&
         interfaceJogo->bgCombateAtualIdx < interfaceJogo->qtdBgCombate &&
-        interfaceJogo->bgCombateAtualIdx < 5) {
+        interfaceJogo->bgCombateAtualIdx < 6) {
         return interfaceJogo->bgCombatePool[interfaceJogo->bgCombateAtualIdx];
     }
     return (Texture2D){ 0 };
@@ -248,26 +292,131 @@ static void desenharTexturaBounds(Texture2D textura, Rectangle bounds)
                    (Vector2){ 0.0f, 0.0f }, 0.0f, WHITE);
 }
 
+static NPatchInfo configurarNPatch(Texture2D textura, int borda)
+{
+    NPatchInfo info = { 0 };
+    if (textura.id == 0) {
+        return info;
+    }
+    info.source = (Rectangle){ 0.0f, 0.0f, (float)textura.width,
+                               (float)textura.height };
+    info.left = borda < textura.width / 2 ? borda : textura.width / 2;
+    info.right = info.left;
+    info.top = borda < textura.height / 2 ? borda : textura.height / 2;
+    info.bottom = info.top;
+    info.layout = NPATCH_NINE_PATCH;
+    return info;
+}
+
+static NPatchInfo obterInfoNPatch(Texture2D textura)
+{
+    if (interfaceRenderizada != NULL) {
+        if (textura.id == interfaceRenderizada->texBtnPadrao.id) {
+            return interfaceRenderizada->nPatchBotao;
+        }
+        if (textura.id == interfaceRenderizada->texFrameRetrato.id) {
+            return interfaceRenderizada->nPatchFrameRetrato;
+        }
+        if (textura.id == interfaceRenderizada->texPainelDetalhes.id) {
+            return interfaceRenderizada->nPatchPainelDescricao;
+        }
+    }
+    return (NPatchInfo){ 0 };
+}
+
+static void desenharNPatch(Texture2D textura, NPatchInfo info,
+                           Rectangle bounds, Color tint)
+{
+    if (textura.id == 0 || bounds.width <= 0.0f || bounds.height <= 0.0f) {
+        return;
+    }
+    if (info.source.width <= 0.0f || info.source.height <= 0.0f) {
+        desenharTexturaBounds(textura, bounds);
+    } else {
+        DrawTextureNPatch(textura, info, converterBoundsVirtual(bounds),
+                          (Vector2){ 0.0f, 0.0f }, 0.0f, tint);
+    }
+}
+
+static Color obterTintBotao(bool isHovered, bool isPressed)
+{
+    if (isPressed) {
+        return (Color){ 205, 205, 205, 255 };
+    }
+    if (isHovered) {
+        return (Color){ 255, 242, 205, 255 };
+    }
+    return WHITE;
+}
+
+void DrawCharacterPortrait(Texture2D portrait, Rectangle bounds)
+{
+    if (portrait.id != 0) {
+        desenharSpriteUnidade(portrait, bounds);
+    }
+    if (interfaceRenderizada != NULL) {
+        desenharNPatch(interfaceRenderizada->texFrameRetrato,
+                       interfaceRenderizada->nPatchFrameRetrato, bounds, WHITE);
+    }
+}
+
+void DrawCustomButton(Rectangle bounds, const char *label, bool isHovered, bool isPressed)
+{
+    Texture2D botao = interfaceRenderizada != NULL ?
+                      interfaceRenderizada->texBtnPadrao : (Texture2D){ 0 };
+    Font fonte = obterFonteInterface();
+    float tamanhoFonte = bounds.height * 0.34f;
+    Rectangle render = converterBoundsVirtual(bounds);
+    if (botao.id != 0) {
+        desenharNPatch(botao, interfaceRenderizada->nPatchBotao, bounds,
+                       obterTintBotao(isHovered, isPressed));
+    } else {
+        DrawRectangleRec(render, isPressed ? (Color){ 34, 49, 59, 255 } :
+                         isHovered ? (Color){ 58, 84, 99, 255 } :
+                         (Color){ 42, 63, 76, 255 });
+        DrawRectangleLinesEx(bounds, 2.0f, (Color){ 125, 153, 170, 255 });
+    }
+    if (label != NULL) {
+        Vector2 tamanhoTexto;
+        if (fonte.texture.id == 0) {
+            fonte = GetFontDefault();
+        }
+        tamanhoTexto = MeasureTextEx(fonte, label, tamanhoFonte * 1.5f, 1.5f);
+        DrawTextEx(fonte, label,
+                   (Vector2){ render.x + (render.width - tamanhoTexto.x) / 2.0f,
+                              render.y + (render.height - tamanhoTexto.y) / 2.0f },
+                   tamanhoFonte * 1.5f, 1.5f, RAYWHITE);
+    }
+}
+
 void DrawUIButtonCustom(Rectangle bounds, const char *text, Texture2D texBotao, Font font)
 {
-    Rectangle boundsRender = converterBoundsVirtual(bounds);
+    Vector2 mouse = obterMouseVirtual();
+    if (interfaceRenderizada != NULL &&
+        texBotao.id == interfaceRenderizada->texBtnPadrao.id) {
+        DrawCustomButton(bounds, text, CheckCollisionPointRec(mouse, bounds),
+                         CheckCollisionPointRec(mouse, bounds) &&
+                         IsMouseButtonDown(MOUSE_BUTTON_LEFT));
+        return;
+    }
     if (texBotao.id != 0) {
-        desenharTexturaBounds(texBotao, bounds);
+        desenharNPatch(texBotao, obterInfoNPatch(texBotao), bounds, WHITE);
     } else {
-        DrawRectangleRec(boundsRender, (Color){ 42, 63, 76, 255 });
+        DrawRectangleRec(converterBoundsVirtual(bounds), (Color){ 42, 63, 76, 255 });
         DrawRectangleLinesEx(bounds, 2.0f, (Color){ 125, 153, 170, 255 });
     }
     if (text != NULL) {
         Vector2 tamanhoTexto;
+        Rectangle boundsRender = converterBoundsVirtual(bounds);
         float tamanhoFonte = bounds.height * 0.34f;
         if (font.texture.id == 0) {
             font = GetFontDefault();
         }
-        tamanhoTexto = MeasureTextEx(font, text, tamanhoFonte, 0.0f);
+        tamanhoTexto = MeasureTextEx(font, text, tamanhoFonte * 1.5f, 1.5f);
         DrawTextEx(font, text,
-                   (Vector2){ boundsRender.x + (boundsRender.width - tamanhoTexto.x * 1.5f) / 2.0f,
-                              boundsRender.y + (boundsRender.height - tamanhoTexto.y * 1.5f) / 2.0f },
-                   tamanhoFonte * 1.5f, 0.0f, RAYWHITE);
+                   (Vector2){ boundsRender.x + (boundsRender.width - tamanhoTexto.x) / 2.0f,
+                              boundsRender.y + (boundsRender.height - tamanhoTexto.y) / 2.0f },
+                   tamanhoFonte * 1.5f, 1.5f, RAYWHITE);
     }
 }
 
@@ -275,7 +424,7 @@ void DrawUIPanelCustom(Rectangle bounds, Texture2D texPainel, Color colorFallbac
 {
     Rectangle boundsRender = converterBoundsVirtual(bounds);
     if (texPainel.id != 0) {
-        desenharTexturaBounds(texPainel, bounds);
+        desenharNPatch(texPainel, obterInfoNPatch(texPainel), bounds, WHITE);
     } else {
         DrawRectangleRec(boundsRender, colorFallback);
         DrawRectangleLinesEx(bounds, 1.5f, (Color){ 90, 110, 125, 210 });
@@ -285,9 +434,184 @@ void DrawUIPanelCustom(Rectangle bounds, Texture2D texPainel, Color colorFallbac
 void DrawUIFrameCustom(Rectangle bounds, Texture2D texBorda)
 {
     if (texBorda.id != 0) {
-        desenharTexturaBounds(texBorda, bounds);
+        desenharNPatch(texBorda, obterInfoNPatch(texBorda), bounds, WHITE);
     } else {
         DrawRectangleLinesEx(bounds, 2.0f, GOLD);
+    }
+}
+
+static float medirTextoVirtual(Font fonte, const char *texto, float tamanhoFonte)
+{
+    return MeasureTextEx(fonte, texto, tamanhoFonte * 1.5f, 1.5f).x / 1.5f;
+}
+
+static void copiarTextoLimitado(char *destino, size_t capacidade, const char *origem)
+{
+    size_t tamanho;
+    if (destino == NULL || capacidade == 0) {
+        return;
+    }
+    tamanho = origem == NULL ? 0 : strlen(origem);
+    if (tamanho >= capacidade) {
+        tamanho = capacidade - 1;
+    }
+    if (tamanho > 0) {
+        (void)memcpy(destino, origem, tamanho);
+    }
+    destino[tamanho] = '\0';
+}
+
+static int montarLinhasTexto(const char *texto, Font fonte, float tamanhoFonte,
+                             float larguraMaxima, char linhas[][512],
+                             float larguras[], int capacidade)
+{
+    char linha[512] = "";
+    size_t indice = 0;
+    int total = 0;
+    if (texto == NULL || texto[0] == '\0' || capacidade <= 0) {
+        return 0;
+    }
+    while (texto[indice] != '\0' && total < capacidade) {
+        char palavra[512];
+        size_t tamanhoPalavra = 0;
+        char candidata[1024];
+        while (texto[indice] == ' ' || texto[indice] == '\t') {
+            indice++;
+        }
+        if (texto[indice] == '\n') {
+            if (linha[0] != '\0') {
+                (void)snprintf(linhas[total], sizeof(linhas[total]), "%s", linha);
+                larguras[total++] = medirTextoVirtual(fonte, linha, tamanhoFonte);
+                linha[0] = '\0';
+            }
+            indice++;
+            continue;
+        }
+        if (texto[indice] == '\0') {
+            break;
+        }
+        while (texto[indice] != '\0' && texto[indice] != ' ' &&
+               texto[indice] != '\t' && texto[indice] != '\n' &&
+               tamanhoPalavra < sizeof(palavra) - 1) {
+            palavra[tamanhoPalavra++] = texto[indice++];
+        }
+        palavra[tamanhoPalavra] = '\0';
+        (void)snprintf(candidata, sizeof(candidata), "%s%s%s", linha,
+                       linha[0] == '\0' ? "" : " ", palavra);
+        if (linha[0] != '\0' &&
+            medirTextoVirtual(fonte, candidata, tamanhoFonte) > larguraMaxima) {
+            (void)snprintf(linhas[total], sizeof(linhas[total]), "%s", linha);
+            larguras[total++] = medirTextoVirtual(fonte, linha, tamanhoFonte);
+            linha[0] = '\0';
+            (void)snprintf(candidata, sizeof(candidata), "%s", palavra);
+        }
+        if (medirTextoVirtual(fonte, candidata, tamanhoFonte) > larguraMaxima &&
+            linha[0] == '\0') {
+            size_t posicao = 0;
+            char chunk[512] = "";
+            while (posicao < tamanhoPalavra && total < capacidade) {
+                unsigned char byte = (unsigned char)palavra[posicao];
+                size_t bytesCodigo = byte < 0x80 ? 1 :
+                                     (byte & 0xE0) == 0xC0 ? 2 :
+                                     (byte & 0xF0) == 0xE0 ? 3 :
+                                     (byte & 0xF8) == 0xF0 ? 4 : 1;
+                char proximo[1024];
+                if (posicao + bytesCodigo > tamanhoPalavra) {
+                    bytesCodigo = 1;
+                }
+                (void)snprintf(proximo, sizeof(proximo), "%s%.*s",
+                               chunk, (int)bytesCodigo, palavra + posicao);
+                if (chunk[0] != '\0' &&
+                    medirTextoVirtual(fonte, proximo, tamanhoFonte) > larguraMaxima) {
+                    (void)snprintf(linhas[total], sizeof(linhas[total]), "%s", chunk);
+                    larguras[total++] = medirTextoVirtual(fonte, chunk, tamanhoFonte);
+                    chunk[0] = '\0';
+                    (void)snprintf(proximo, sizeof(proximo), "%.*s",
+                                   (int)bytesCodigo, palavra + posicao);
+                }
+                copiarTextoLimitado(chunk, sizeof(chunk), proximo);
+                posicao += bytesCodigo;
+            }
+            if (chunk[0] != '\0' && total < capacidade) {
+                (void)snprintf(linhas[total], sizeof(linhas[total]), "%s", chunk);
+                larguras[total++] = medirTextoVirtual(fonte, chunk, tamanhoFonte);
+            }
+        } else {
+            copiarTextoLimitado(linha, sizeof(linha), candidata);
+        }
+    }
+    if (linha[0] != '\0' && total < capacidade) {
+        (void)snprintf(linhas[total], sizeof(linhas[total]), "%s", linha);
+        larguras[total++] = medirTextoVirtual(fonte, linha, tamanhoFonte);
+    }
+    return total;
+}
+
+void DrawDynamicDescriptionBox(Vector2 pos, float maxWidth,
+                               const char *title, const char *body)
+{
+    char linhasTitulo[64][512] = { { 0 } };
+    char linhasCorpo[64][512] = { { 0 } };
+    float largurasTitulo[64] = { 0.0f };
+    float largurasCorpo[64] = { 0.0f };
+    Font fonte = obterFonteInterface();
+    const float padding = 9.0f;
+    const float tamanhoTitulo = 18.0f;
+    const float tamanhoCorpo = 14.0f;
+    const float alturaTitulo = 22.0f;
+    const float alturaCorpo = 18.0f;
+    float larguraTextoMaxima;
+    float larguraConteudo = 0.0f;
+    float alturaConteudo = padding * 2.0f;
+    float larguraPainel;
+    int totalTitulo;
+    int totalCorpo;
+    int indice;
+    float y;
+    if (maxWidth <= padding * 2.0f) {
+        return;
+    }
+    larguraTextoMaxima = maxWidth - padding * 2.0f;
+    totalTitulo = montarLinhasTexto(title, fonte, tamanhoTitulo, larguraTextoMaxima,
+                                    linhasTitulo, largurasTitulo, 64);
+    totalCorpo = montarLinhasTexto(body, fonte, tamanhoCorpo, larguraTextoMaxima,
+                                   linhasCorpo, largurasCorpo, 64);
+    for (indice = 0; indice < totalTitulo; indice++) {
+        if (largurasTitulo[indice] > larguraConteudo) {
+            larguraConteudo = largurasTitulo[indice];
+        }
+    }
+    for (indice = 0; indice < totalCorpo; indice++) {
+        if (largurasCorpo[indice] > larguraConteudo) {
+            larguraConteudo = largurasCorpo[indice];
+        }
+    }
+    alturaConteudo += (float)totalTitulo * alturaTitulo;
+    if (totalTitulo > 0 && totalCorpo > 0) {
+        alturaConteudo += 3.0f;
+    }
+    alturaConteudo += (float)totalCorpo * alturaCorpo;
+    larguraPainel = larguraConteudo + padding * 2.0f;
+    if (larguraPainel < 2.0f * padding) {
+        larguraPainel = 2.0f * padding;
+    }
+    DrawUIPanelCustom((Rectangle){ pos.x, pos.y, larguraPainel, alturaConteudo },
+                      interfaceRenderizada == NULL ? (Texture2D){ 0 } :
+                      interfaceRenderizada->texPainelDetalhes,
+                      (Color){ 12, 19, 27, 245 });
+    y = pos.y + padding;
+    for (indice = 0; indice < totalTitulo; indice++) {
+        desenharTextoGlobal(linhasTitulo[indice],
+                            (Vector2){ pos.x + padding, y }, tamanhoTitulo, GOLD);
+        y += alturaTitulo;
+    }
+    if (totalTitulo > 0 && totalCorpo > 0) {
+        y += 3.0f;
+    }
+    for (indice = 0; indice < totalCorpo; indice++) {
+        desenharTextoGlobal(linhasCorpo[indice],
+                            (Vector2){ pos.x + padding, y }, tamanhoCorpo, RAYWHITE);
+        y += alturaCorpo;
     }
 }
 
@@ -754,15 +1078,7 @@ static void iniciarEncontro(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
     if (interfaceJogo->rota_atual == NULL || *interfaceJogo->rota_atual == NULL) {
         return;
     }
-    interfaceJogo->bgBossAtivo = (*interfaceJogo->rota_atual)->tipo == ROTA_CHEFE;
-    if (interfaceJogo->bgBossAtivo) {
-        interfaceJogo->bgCombateAtualIdx = -1;
-    } else if (interfaceJogo->qtdBgCombate > 0) {
-        interfaceJogo->bgCombateAtualIdx =
-            GetRandomValue(0, interfaceJogo->qtdBgCombate - 1);
-    } else {
-        interfaceJogo->bgCombateAtualIdx = -1;
-    }
+    SelectCombatBackground((*interfaceJogo->rota_atual)->tipo == ROTA_CHEFE);
     limparMapa(mapa);
     posicionarTripulacao(interfaceJogo, mapa, piratas, totalPiratas);
     for (linha = 0; linha < LINHAS_TABULEIRO; linha++) {
@@ -1328,6 +1644,19 @@ static Texture2D carregarTexturaOpcional(const char *caminho)
     return textura;
 }
 
+static Texture2D carregarTexturaBackground(const char *nomeArquivo)
+{
+    char caminho[160];
+    if (nomeArquivo == NULL) {
+        return (Texture2D){ 0 };
+    }
+    (void)snprintf(caminho, sizeof(caminho), "assets/backgrounds/%s", nomeArquivo);
+    if (!FileExists(caminho)) {
+        (void)snprintf(caminho, sizeof(caminho), "assets/textures/%s", nomeArquivo);
+    }
+    return carregarTexturaOpcional(caminho);
+}
+
 // Seleciona a pose visual do pirata ou Grunt conforme seu estado atual.
 static Texture2D obterSpriteUnidade(const InterfaceJogo *interfaceJogo,
                                    const Combatente *unidade)
@@ -1488,9 +1817,16 @@ void inicializarInterface(InterfaceJogo *interfaceJogo)
     int indice;
     int pose;
     int fundosCarregados = 0;
+    static const char *arquivosBackgroundCombate[6] = {
+        "bg_navio.png",
+        "bg_praia.png",
+        "bg_floresta.png",
+        "bg_ruinas.png",
+        "bg_ilha_sombria.png",
+        "bg_cidade_pirata.png"
+    };
     const char *diretorioWindows;
     char caminhoFonte[512];
-    char caminhoTextura[128];
     if (interfaceJogo == NULL) {
         return;
     }
@@ -1504,6 +1840,7 @@ void inicializarInterface(InterfaceJogo *interfaceJogo)
     interfaceJogo->coluna_destaque_acao = -1;
     interfaceJogo->linha_origem_acao = -1;
     interfaceJogo->bgCombateAtualIdx = -1;
+    interfaceJogo->bgCombateAnteriorIdx = -1;
     interfaceJogo->coluna_origem_acao = -1;
     interfaceJogo->largura_celula = 180;
     interfaceJogo->altura_celula = 135;
@@ -1533,6 +1870,7 @@ void inicializarInterface(InterfaceJogo *interfaceJogo)
     } else {
         TraceLog(LOG_ERROR, "Arquivo assets/textures/bg_mar.png nao encontrado.");
     }
+    gerenciadorFundoCombate = interfaceJogo;
     for (indice = 0; indice < 5; indice++) {
         for (pose = 0; pose < TOTAL_POSES_SPRITES_PIRATA; pose++) {
             char caminhoSprite[160];
@@ -1562,39 +1900,32 @@ void inicializarInterface(InterfaceJogo *interfaceJogo)
     for (indice = 0; indice < 224; indice++) {
         codepoints[indice] = 32 + indice;
     }
-    if (FileExists("assets/textures/bg_navio.png")) {
-        interfaceJogo->bgNavio = LoadTexture("assets/textures/bg_navio.png");
-        if (interfaceJogo->bgNavio.id != 0) {
-            SetTextureFilter(interfaceJogo->bgNavio, TEXTURE_FILTER_BILINEAR);
-        } else {
-            TraceLog(LOG_ERROR, "Nao foi possivel carregar assets/textures/bg_navio.png.");
-        }
-    } else {
-        TraceLog(LOG_ERROR, "Arquivo assets/textures/bg_navio.png nao encontrado.");
-    }
-    for (indice = 0; indice < 5; indice++) {
-        (void)snprintf(caminhoTextura, sizeof(caminhoTextura),
-                       "assets/textures/bg_combate_%d.png", indice + 1);
+    for (indice = 0; indice < 6; indice++) {
         interfaceJogo->bgCombatePool[fundosCarregados] =
-            carregarTexturaOpcional(caminhoTextura);
+            carregarTexturaBackground(arquivosBackgroundCombate[indice]);
         if (interfaceJogo->bgCombatePool[fundosCarregados].id != 0) {
             fundosCarregados++;
         }
     }
-    if (fundosCarregados == 0 && interfaceJogo->bgNavio.id != 0) {
-        interfaceJogo->bgCombatePool[0] = interfaceJogo->bgNavio;
-        fundosCarregados = 1;
-    }
     interfaceJogo->qtdBgCombate = fundosCarregados;
-    interfaceJogo->bgBoss = carregarTexturaOpcional("assets/textures/bg_boss.png");
+    interfaceJogo->bgBoss = carregarTexturaBackground("bg_boss_navio.png");
     interfaceJogo->texBtnPadrao =
-        carregarTexturaOpcional("assets/textures/tex_btn_padrao.png");
+        carregarTexturaOpcional("assets/ui/botao_ui.png");
     interfaceJogo->texFrameRetrato =
-        carregarTexturaOpcional("assets/textures/tex_frame_retrato.png");
+        carregarTexturaOpcional("assets/ui/frame_personagem.png");
     interfaceJogo->texPainelDetalhes =
-        carregarTexturaOpcional("assets/textures/tex_painel_detalhes.png");
-    interfaceJogo->texPainelMochila =
-        carregarTexturaOpcional("assets/textures/tex_painel_mochila.png");
+        carregarTexturaOpcional("assets/ui/painel_descricao.png");
+    interfaceJogo->texBarraStatusUnificada =
+        carregarTexturaOpcional("assets/ui/barra_status_unificada.png");
+    if (interfaceJogo->texBarraStatusUnificada.id == 0) {
+        TraceLog(LOG_ERROR,
+                 "Nao foi possivel carregar assets/ui/barra_status_unificada.png.");
+    }
+    interfaceJogo->nPatchBotao = configurarNPatch(interfaceJogo->texBtnPadrao, 24);
+    interfaceJogo->nPatchFrameRetrato =
+        configurarNPatch(interfaceJogo->texFrameRetrato, 24);
+    interfaceJogo->nPatchPainelDescricao =
+        configurarNPatch(interfaceJogo->texPainelDetalhes, 24);
     diretorioWindows = getenv("WINDIR");
     if (diretorioWindows == NULL || diretorioWindows[0] == '\0') {
         diretorioWindows = getenv("SystemRoot");
@@ -2984,7 +3315,7 @@ static void desenharMochila(const InterfaceJogo *interfaceJogo)
     bool somenteConsumiveis = interfaceJogo->estado == TELA_COMBATE_3X6 &&
                               !interfaceJogo->fase_pre_combate_ativa;
     DrawUIPanelCustom((Rectangle){ 160.0f, 50.0f, 700.0f, 555.0f },
-                      interfaceJogo->texPainelMochila, (Color){ 12, 19, 27, 252 });
+                      interfaceJogo->texPainelDetalhes, (Color){ 12, 19, 27, 252 });
     DrawUIFrameCustom((Rectangle){ 160.0f, 50.0f, 700.0f, 555.0f },
                       interfaceJogo->texFrameRetrato);
     desenharTexto("MOCHILA DA TRIPULAÇÃO E BUILDS PASSIVAS", 180, 68, 20, GOLD);
@@ -3024,7 +3355,7 @@ static void desenharMochila(const InterfaceJogo *interfaceJogo)
         if (posLinhaY >= 172 && posLinhaY <= 325) {
             bool selecionadoItem = item->item.id == interfaceJogo->item_id_selecionado;
             DrawUIPanelCustom((Rectangle){ 180.0f, (float)posLinhaY, 650.0f, 44.0f },
-                              interfaceJogo->texPainelMochila,
+                              interfaceJogo->texPainelDetalhes,
                               selecionadoItem ? (Color){ 48, 65, 78, 255 } :
                                                 (Color){ 26, 40, 52, 255 });
             DrawRectangleLines(180, posLinhaY, 650, 44,
@@ -3232,30 +3563,6 @@ static void desenharRecompensas(const InterfaceJogo *interfaceJogo)
     desenharTexto("CONTINUAR", 580, 487, 18, RAYWHITE);
 }
 
-// Retorna um nome conciso e legível da unidade para exibição clara na barra de iniciativa.
-static const char *nomeCurtoIniciativa(const Combatente *ator)
-{
-    if (ator == NULL) {
-        return "";
-    }
-    if (ator->aliado) {
-        return ator->nome;
-    }
-    if (ator->eh_boss) {
-        return "Barba Negra";
-    }
-    switch (ator->tipo_inimigo) {
-    case INIMIGO_GRUNT_ESPADA:
-        return "Grunt Espada";
-    case INIMIGO_GRUNT_PISTOLA:
-        return "Grunt Pistola";
-    case INIMIGO_ATIRADOR_MAGRELO:
-        return "Atirador Magrelo";
-    default:
-        return "Marujo Gordo";
-    }
-}
-
 // Desenha a barra superior da fila de iniciativa com ordem de turnos clara e sem números soltos.
 static void desenharFila(const InterfaceJogo *interfaceJogo)
 {
@@ -3269,16 +3576,19 @@ static void desenharFila(const InterfaceJogo *interfaceJogo)
         if (ator == NULL || !ator->vivo) {
             continue;
         }
-        DrawRectangle(posCardX, 7, 45, 45, ator->aliado ?
-                      (Color){ 35, 75, 105, 255 } : (Color){ 115, 55, 40, 255 });
+        {
+            Texture2D retrato = obterSpriteUnidade(interfaceJogo, ator);
+            DrawCharacterPortrait(retrato,
+                              (Rectangle){ (float)posCardX, 7.0f, 45.0f, 45.0f });
+            if (retrato.id == 0) {
+                desenharTexto(TextFormat("%c", ator->nome[0] == '\0' ? '?' : ator->nome[0]),
+                              posCardX + 16, 18, 19, RAYWHITE);
+            }
+        }
         if (turnoAtivo) {
             DrawRectangleLinesEx((Rectangle){ (float)posCardX, 7.0f, 45.0f, 45.0f },
                                  3.0f, GOLD);
-        } else {
-            DrawRectangleLines(posCardX, 7, 45, 45, (Color){ 90, 110, 125, 180 });
         }
-        desenharTexto(TextFormat("%c", nomeCurtoIniciativa(ator)[0]),
-                      posCardX + 16, 18, 19, turnoAtivo ? GOLD : RAYWHITE);
         slotVisivel++;
     }
 }
@@ -3287,9 +3597,8 @@ static void desenharHUDAtorAtivo(const InterfaceJogo *interfaceJogo)
 {
     const Combatente *ator;
     Rectangle retrato = { 928.0f, 8.0f, 88.0f, 88.0f };
-    Rectangle barraHP = { 928.0f, 103.0f, 324.0f, 20.0f };
-    Rectangle barraEstamina = { 928.0f, 128.0f, 324.0f, 20.0f };
-    float proporcao;
+    Rectangle barraStatus = { 1028.0f, 66.0f, 220.0f, 72.0f };
+    Rectangle nomeAtor = { 1028.0f, 12.0f, 220.0f, 28.0f };
     Color corGrupo;
     if (interfaceJogo == NULL) {
         return;
@@ -3303,47 +3612,19 @@ static void desenharHUDAtorAtivo(const InterfaceJogo *interfaceJogo)
     corGrupo = ator != NULL && !ator->aliado ?
                (Color){ 135, 45, 38, 255 } : (Color){ 35, 75, 105, 255 };
     DrawRectangleRec(converterBoundsVirtual(retrato), corGrupo);
-    DrawUIFrameCustom(retrato, interfaceJogo->texFrameRetrato);
+    {
+        Texture2D texturaRetrato = ator == NULL ? (Texture2D){ 0 } :
+                                   obterSpriteUnidade(interfaceJogo, ator);
+        DrawCharacterPortrait(texturaRetrato, retrato);
+        if (ator != NULL && texturaRetrato.id == 0) {
+            desenharTexto(TextFormat("%c", ator->nome[0] == '\0' ? '?' : ator->nome[0]),
+                          962, 34, 30, RAYWHITE);
+        }
+    }
     if (ator != NULL) {
-        desenharTexto(TextFormat("%c", ator->nome[0] == '\0' ? '?' : ator->nome[0]),
-                      962, 34, 30, RAYWHITE);
-        desenharTexto(ator->nome, 1028, 12, 16, ator->aliado ? SKYBLUE : ORANGE);
-        DrawRectangleRec(converterBoundsVirtual(barraHP), (Color){ 35, 42, 45, 255 });
-        proporcao = ator->vida_maxima > 0 ?
-                    (float)ator->vida_atual / (float)ator->vida_maxima : 0.0f;
-        if (proporcao < 0.0f) {
-            proporcao = 0.0f;
-        } else if (proporcao > 1.0f) {
-            proporcao = 1.0f;
-        }
-        DrawRectangleRec(converterBoundsVirtual((Rectangle){
-            barraHP.x, barraHP.y, barraHP.width * proporcao, barraHP.height
-        }), ator->vida_atual > ator->vida_maxima / 3 ? GREEN : RED);
-        DrawRectangleLinesEx(barraHP, 1.0f, RAYWHITE);
-        DrawRectangleRec(converterBoundsVirtual((Rectangle){
-            932.0f, 104.0f, 132.0f, 18.0f
-        }), (Color){ 245, 245, 235, 225 });
-        desenharTexto(TextFormat("HP: %d/%d", ator->vida_atual, ator->vida_maxima),
-                      935, 105, 12, BLACK);
-        DrawRectangleRec(converterBoundsVirtual(barraEstamina), (Color){ 35, 42, 45, 255 });
-        proporcao = ator->estamina_maxima > 0 ?
-                    (float)ator->estamina_atual / (float)ator->estamina_maxima : 0.0f;
-        if (proporcao < 0.0f) {
-            proporcao = 0.0f;
-        } else if (proporcao > 1.0f) {
-            proporcao = 1.0f;
-        }
-        DrawRectangleRec(converterBoundsVirtual((Rectangle){
-            barraEstamina.x, barraEstamina.y,
-            barraEstamina.width * proporcao, barraEstamina.height
-        }), ator->aliado ? GOLD : SKYBLUE);
-        DrawRectangleLinesEx(barraEstamina, 1.0f, RAYWHITE);
-        DrawRectangleRec(converterBoundsVirtual((Rectangle){
-            932.0f, 129.0f, 132.0f, 18.0f
-        }), (Color){ 245, 245, 235, 225 });
-        desenharTexto(TextFormat("EST: %d/%d",
-                                 ator->estamina_atual, ator->estamina_maxima),
-                      935, 130, 12, BLACK);
+        desenharTextoCentralizadoContornado(ator->nome, nomeAtor, 14,
+                                            ator->aliado ? SKYBLUE : ORANGE);
+        desenharBarraStatusCombatente(interfaceJogo, ator, barraStatus, 11);
     } else {
         desenharTexto("PRE-COMBATE", 1028, 15, 16, GOLD);
     }
@@ -3366,6 +3647,182 @@ static int obterAlcanceMovimentoUnidade(const Combatente *unidade)
     return passoMaximo;
 }
 
+static void desenharTextoCentralizadoContornado(const char *texto, Rectangle bounds,
+                                                int tamanho, Color cor)
+{
+    int larguraTexto;
+    int posX;
+    int posY;
+    if (texto == NULL || texto[0] == '\0') {
+        return;
+    }
+    larguraTexto = medirLarguraTexto(texto, tamanho);
+    posX = (int)(bounds.x + (bounds.width - (float)larguraTexto) * 0.5f);
+    posY = (int)(bounds.y + (bounds.height - (float)(tamanho + 2)) * 0.5f);
+    desenharTexto(texto, posX - 1, posY, tamanho, BLACK);
+    desenharTexto(texto, posX + 1, posY, tamanho, BLACK);
+    desenharTexto(texto, posX, posY - 1, tamanho, BLACK);
+    desenharTexto(texto, posX, posY + 1, tamanho, BLACK);
+    desenharTexto(texto, posX, posY, tamanho, cor);
+}
+
+static float calcularProporcaoStatus(int atual, int maximo)
+{
+    if (maximo <= 0 || atual <= 0) {
+        return 0.0f;
+    }
+    if (atual >= maximo) {
+        return 1.0f;
+    }
+    return (float)atual / (float)maximo;
+}
+
+static void desenharPreenchimentoStatus(Rectangle area, float proporcao,
+                                       Color corPreenchida,
+                                       bool desenharPartePreenchida)
+{
+    if (proporcao < 1.0f) {
+        Rectangle vazio = {
+            area.x + area.width * proporcao,
+            area.y,
+            area.width * (1.0f - proporcao),
+            area.height
+        };
+        DrawRectangle((int)vazio.x, (int)vazio.y, (int)vazio.width,
+                      (int)vazio.height,
+                      (Color){ 10, 12, 14, 190 });
+    }
+    if (desenharPartePreenchida) {
+        DrawRectangle((int)area.x, (int)area.y, (int)(area.width * proporcao),
+                      (int)area.height, corPreenchida);
+    }
+}
+
+static void desenharBarraStatusCombatente(const InterfaceJogo *interfaceJogo,
+                                          const Combatente *unidade,
+                                          Rectangle bounds, int tamanhoTexto)
+{
+    const float margemX = 0.07f;
+    const float larguraPreenchimento = 0.86f;
+    float proporcaoVida = calcularProporcaoStatus(unidade->vida_atual,
+                                                   unidade->vida_maxima);
+    float proporcaoEstamina = calcularProporcaoStatus(unidade->estamina_atual,
+                                                      unidade->estamina_maxima);
+    Rectangle areaVida = {
+        bounds.x + bounds.width * margemX,
+        bounds.y + bounds.height * 0.19f,
+        bounds.width * larguraPreenchimento,
+        bounds.height * 0.27f
+    };
+    Rectangle areaEstamina = {
+        bounds.x + bounds.width * margemX,
+        bounds.y + bounds.height * 0.55f,
+        bounds.width * larguraPreenchimento,
+        bounds.height * 0.27f
+    };
+    if (interfaceJogo->texBarraStatusUnificada.id != 0) {
+        desenharTexturaBounds(interfaceJogo->texBarraStatusUnificada, bounds);
+        desenharPreenchimentoStatus(areaVida, proporcaoVida, RED, false);
+        desenharPreenchimentoStatus(areaEstamina, proporcaoEstamina, GREEN, false);
+    } else {
+        DrawRectangle((int)bounds.x, (int)bounds.y, (int)bounds.width,
+                      (int)bounds.height, (Color){ 35, 40, 42, 255 });
+        DrawRectangle((int)areaVida.x, (int)areaVida.y, (int)areaVida.width,
+                      (int)areaVida.height, (Color){ 70, 20, 20, 255 });
+        DrawRectangle((int)areaEstamina.x, (int)areaEstamina.y,
+                      (int)areaEstamina.width, (int)areaEstamina.height,
+                      (Color){ 15, 55, 25, 255 });
+        desenharPreenchimentoStatus(areaVida, proporcaoVida, RED, true);
+        desenharPreenchimentoStatus(areaEstamina, proporcaoEstamina, GREEN, true);
+        DrawRectangleLinesEx(bounds, 2.0f, GOLD);
+    }
+    desenharTextoCentralizadoContornado(
+        TextFormat("%d/%d", unidade->vida_atual, unidade->vida_maxima),
+        areaVida, tamanhoTexto, RAYWHITE);
+    desenharTextoCentralizadoContornado(
+        TextFormat("%d/%d", unidade->estamina_atual, unidade->estamina_maxima),
+        areaEstamina, tamanhoTexto, RAYWHITE);
+}
+
+typedef struct {
+    Combatente *unidade;
+    Rectangle squareBounds;
+} UnidadeOrdenadaTabuleiro;
+
+static float calcularDeslocamentoVerticalUnidade(Rectangle quadrado,
+                                                 float alturaBarra)
+{
+    float alturaRender = canvasCarregado && canvasVirtual.id != 0 ?
+                         (float)canvasVirtual.texture.height :
+                         (float)GetScreenHeight();
+    float alturaVirtualVisivel = alturaRender / 1.5f;
+    float yBarra = quadrado.y + quadrado.height + CHARACTER_STATUS_GAP +
+                   CHARACTER_VERTICAL_OFFSET;
+    float yBarraMaximo = alturaVirtualVisivel - BOTTOM_SCREEN_MARGIN - alturaBarra;
+    float deslocamento = CHARACTER_VERTICAL_OFFSET;
+
+    if (alturaVirtualVisivel > 0.0f && yBarra > yBarraMaximo) {
+        deslocamento -= yBarra - yBarraMaximo;
+    }
+    return deslocamento;
+}
+
+static void desenharUnidadeTabuleiro(const InterfaceJogo *interfaceJogo,
+                                     Combatente *unidade, Rectangle quadrado)
+{
+    Rectangle spriteBounds;
+    Rectangle nomeBounds;
+    Rectangle barraStatus;
+    Texture2D sprite = obterSpriteUnidade(interfaceJogo, unidade);
+    float alturaSprite = quadrado.height * CHARACTER_BASE_HEIGHT_RATIO *
+                         CHARACTER_VISUAL_SCALE;
+    float larguraSprite = sprite.width > 0 && sprite.height > 0 ?
+                          alturaSprite * (float)sprite.width / (float)sprite.height :
+                          alturaSprite * 0.67f;
+    float larguraBarra = quadrado.width * CHARACTER_STATUS_WIDTH_RATIO *
+                         CHARACTER_VISUAL_SCALE;
+    float alturaBarra = CHARACTER_BASE_STATUS_HEIGHT * CHARACTER_VISUAL_SCALE;
+    float deslocamentoVertical = calcularDeslocamentoVerticalUnidade(quadrado,
+                                                                     alturaBarra);
+    int tamanhoFonte = (int)(CHARACTER_BASE_FONT_SIZE * CHARACTER_VISUAL_SCALE + 0.5f);
+
+    spriteBounds = (Rectangle){
+        quadrado.x + (quadrado.width - larguraSprite) * 0.5f,
+        quadrado.y + quadrado.height - alturaSprite + deslocamentoVertical,
+        larguraSprite, alturaSprite
+    };
+    desenharSpriteUnidade(sprite, spriteBounds);
+    if (unidade->eh_elite) {
+        DrawCircle((int)quadrado.x + 10, (int)quadrado.y + 10, 5, GOLD);
+    }
+    if (unidade == interfaceJogo->ator_atual &&
+        !interfaceJogo->fase_pre_combate_ativa) {
+        DrawRectangleLinesEx(quadrado, 3.0f,
+                             unidade->aliado ? GREEN : ORANGE);
+    }
+    if (unidade == interfaceJogo->entidade_selecionada) {
+        DrawRectangleLinesEx((Rectangle){ quadrado.x + 2.0f, quadrado.y + 2.0f,
+                                           quadrado.width - 4.0f,
+                                           quadrado.height - 4.0f },
+                             2.0f, GOLD);
+    }
+
+    barraStatus = (Rectangle){
+        quadrado.x + (quadrado.width - larguraBarra) * 0.5f,
+        quadrado.y + quadrado.height + CHARACTER_STATUS_GAP + deslocamentoVertical,
+        larguraBarra, alturaBarra
+    };
+    nomeBounds = (Rectangle){
+        quadrado.x + (quadrado.width - larguraBarra) * 0.5f,
+        quadrado.y + quadrado.height - alturaSprite - CHARACTER_NAME_GAP -
+            CHARACTER_BASE_NAME_HEIGHT * CHARACTER_VISUAL_SCALE + deslocamentoVertical,
+        larguraBarra, CHARACTER_BASE_NAME_HEIGHT * CHARACTER_VISUAL_SCALE
+    };
+    desenharTextoCentralizadoContornado(unidade->nome, nomeBounds, tamanhoFonte,
+                                        unidade->aliado ? SKYBLUE : ORANGE);
+    desenharBarraStatusCombatente(interfaceJogo, unidade, barraStatus, tamanhoFonte);
+}
+
 // Desenha o tabuleiro 3x6 contínuo, zonas de preparação, alcance, minas e unidades.
 static void desenharTabuleiro(const InterfaceJogo *interfaceJogo,
                               const Tabuleiro3x6 *mapa, const ListaAlcance *alcance)
@@ -3373,6 +3830,11 @@ static void desenharTabuleiro(const InterfaceJogo *interfaceJogo,
     int linha;
     int coluna;
     int passoMovimento = obterAlcanceMovimentoUnidade(interfaceJogo->ator_atual);
+    UnidadeOrdenadaTabuleiro unidades[LINHAS_TABULEIRO * COLUNAS_TABULEIRO];
+    int totalUnidades = 0;
+    Combatente *unidadeHovered = NULL;
+    float hoveredY = -1.0f;
+    Vector2 mouse = obterMouseVirtual();
     for (linha = 0; linha < LINHAS_TABULEIRO; linha++) {
         for (coluna = 0; coluna < COLUNAS_TABULEIRO; coluna++) {
             int posX = interfaceJogo->margem_esquerda + coluna * interfaceJogo->largura_celula;
@@ -3432,43 +3894,6 @@ static void desenharTabuleiro(const InterfaceJogo *interfaceJogo,
             }
             if (mapa->mina_ativa[linha][coluna] > 0) {
                 DrawCircle(posX + 86, posY + 100, 11, RED);
-                desenharTexto("MINA", posX + 68, posY + 114, 12, RAYWHITE);
-            }
-            if (unidade != NULL && unidade->vivo) {
-                desenharTexto(unidade->nome, posX + 8, posY + 8, 14,
-                              unidade->aliado ? SKYBLUE : ORANGE);
-                desenharSpriteUnidade(obterSpriteUnidade(interfaceJogo, unidade),
-                                      (Rectangle){ (float)(posX + 108), (float)(posY + 32),
-                                                   62.0f, 92.0f });
-                if (unidade->eh_elite) {
-                    DrawRectangle(posX + 124, posY + 6, 48, 20, (Color){ 145, 42, 38, 255 });
-                    desenharTexto("ELITE", posX + 130, posY + 9, 12, GOLD);
-                }
-                desenharTexto(TextFormat("PV %d/%d", unidade->vida_atual,
-                                         unidade->vida_maxima), posX + 8, posY + 30, 14, RAYWHITE);
-                desenharTexto(TextFormat("EST %d/%d", unidade->estamina_atual,
-                                         unidade->estamina_maxima), posX + 8, posY + 50, 14, GOLD);
-                if (unidade->em_descanso) {
-                    desenharTexto("DESCANSANDO", posX + 8, posY + 70, 11, YELLOW);
-                }
-                desenharIndicadoresStatusUnidade(unidade, posX + 8, posY + 90,
-                                                 unidade->aliado ? 96 :
-                                                 interfaceJogo->largura_celula - 16);
-                if (unidade == interfaceJogo->ator_atual &&
-                    !interfaceJogo->fase_pre_combate_ativa) {
-                    DrawRectangleLinesEx((Rectangle){ (float)posX, (float)posY,
-                                                       (float)interfaceJogo->largura_celula - 4,
-                                                       (float)interfaceJogo->altura_celula - 4 },
-                                         3.0f, unidade->aliado ? GREEN : ORANGE);
-                }
-                if (unidade == interfaceJogo->entidade_selecionada) {
-                    DrawRectangleLinesEx((Rectangle){ (float)posX + 2, (float)posY + 2,
-                                                       (float)interfaceJogo->largura_celula - 8,
-                                                       (float)interfaceJogo->altura_celula - 8 },
-                                         2.0f, GOLD);
-                }
-            } else {
-                desenharTexto(TextFormat("%d,%d", linha, coluna), posX + 8, posY + 12, 13, LIGHTGRAY);
             }
             if (interfaceJogo->timer_indicador_dano > 0.0f) {
                 int danoCelula = mapa->ultimo_dano_celula[linha][coluna];
@@ -3490,6 +3915,78 @@ static void desenharTabuleiro(const InterfaceJogo *interfaceJogo,
             DrawRectangleLines(posX, posY, interfaceJogo->largura_celula - 4,
                                interfaceJogo->altura_celula - 4,
                                (Color){ 180, 193, 184, 255 });
+        }
+    }
+
+    for (linha = 0; linha < LINHAS_TABULEIRO; linha++) {
+        for (coluna = 0; coluna < COLUNAS_TABULEIRO; coluna++) {
+            int posX = interfaceJogo->margem_esquerda + coluna * interfaceJogo->largura_celula;
+            int posY = interfaceJogo->margem_superior + linha * interfaceJogo->altura_celula;
+            Combatente *unidade = mapa->celulas[linha][coluna];
+            Rectangle quadrado;
+            if (unidade == NULL || !unidade->vivo) {
+                continue;
+            }
+            quadrado = (Rectangle){
+                (float)posX, (float)posY,
+                (float)interfaceJogo->largura_celula - 4.0f,
+                (float)interfaceJogo->altura_celula - 4.0f
+            };
+            unidades[totalUnidades++] = (UnidadeOrdenadaTabuleiro){ unidade, quadrado };
+        }
+    }
+
+    for (linha = 1; linha < totalUnidades; linha++) {
+        UnidadeOrdenadaTabuleiro unidade = unidades[linha];
+        int indice = linha;
+        while (indice > 0 &&
+               unidades[indice - 1].squareBounds.y > unidade.squareBounds.y) {
+            unidades[indice] = unidades[indice - 1];
+            indice--;
+        }
+        unidades[indice] = unidade;
+    }
+
+    for (linha = 0; linha < totalUnidades; linha++) {
+        Combatente *unidade = unidades[linha].unidade;
+        Texture2D sprite = obterSpriteUnidade(interfaceJogo, unidade);
+        float alturaSprite = unidades[linha].squareBounds.height *
+                             CHARACTER_BASE_HEIGHT_RATIO * CHARACTER_VISUAL_SCALE;
+        float larguraSprite = sprite.width > 0 && sprite.height > 0 ?
+                              alturaSprite * (float)sprite.width / (float)sprite.height :
+                              alturaSprite * 0.67f;
+        float alturaBarra = CHARACTER_BASE_STATUS_HEIGHT * CHARACTER_VISUAL_SCALE;
+        float deslocamentoVertical = calcularDeslocamentoVerticalUnidade(
+            unidades[linha].squareBounds, alturaBarra);
+        Rectangle spriteBounds = {
+            unidades[linha].squareBounds.x +
+                (unidades[linha].squareBounds.width - larguraSprite) * 0.5f,
+            unidades[linha].squareBounds.y +
+                unidades[linha].squareBounds.height - alturaSprite + deslocamentoVertical,
+            larguraSprite, alturaSprite
+        };
+        bool sobMouse = CheckCollisionPointRec(mouse, unidades[linha].squareBounds) ||
+                        CheckCollisionPointRec(mouse, spriteBounds);
+        if (sobMouse && unidades[linha].squareBounds.y >= hoveredY) {
+            unidadeHovered = unidade;
+            hoveredY = unidades[linha].squareBounds.y;
+        }
+    }
+
+    for (linha = 0; linha < totalUnidades; linha++) {
+        Combatente *unidade = unidades[linha].unidade;
+        if (unidade != unidadeHovered) {
+            desenharUnidadeTabuleiro(interfaceJogo, unidade,
+                                     unidades[linha].squareBounds);
+        }
+    }
+    if (unidadeHovered != NULL) {
+        for (linha = 0; linha < totalUnidades; linha++) {
+            if (unidades[linha].unidade == unidadeHovered) {
+                desenharUnidadeTabuleiro(interfaceJogo, unidadeHovered,
+                                         unidades[linha].squareBounds);
+                break;
+            }
         }
     }
 }
@@ -3663,10 +4160,13 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
             }
         }
         desenharTabuleiro(interfaceJogo, mapa, alcanceAtivo);
-        DrawRectangle(70, 600, 1170, 102, (Color){ 12, 20, 29, 235 });
+        DrawUIPanelCustom((Rectangle){ 70.0f, 600.0f, 1170.0f, 102.0f },
+                          interfaceJogo->texPainelDetalhes,
+                          (Color){ 12, 20, 29, 235 });
         if (interfaceJogo->fase_pre_combate_ativa) {
-            desenharTexto("Clique nos piratas para posicionar/trocar antes de iniciar.",
-                          90, 578, 12, LIGHTGRAY);
+            DrawDynamicDescriptionBox((Vector2){ 90.0f, 578.0f }, 830.0f,
+                                      NULL,
+                                      "Clique nos piratas para posicionar/trocar antes de iniciar.");
             DrawUIButtonCustom((Rectangle){ 90.0f, 630.0f, 260.0f, 55.0f },
                                "INICIAR COMBATE", interfaceJogo->texBtnPadrao,
                                obterFonteInterface());
@@ -3687,22 +4187,23 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
                              interfaceJogo->ator_atual->habilidades_desbloqueadas : 1;
             if (interfaceJogo->ator_atual != NULL && interfaceJogo->ator_atual->aliado) {
                 if (interfaceJogo->acao_combate == ACAO_TELA_MOVER) {
-                    desenharTexto("MOVER: Clique em uma casa verde ortogonal vazia (custo: 1 Estamina).",
-                                  90, 608, 14, SKYBLUE);
+                    DrawDynamicDescriptionBox(
+                        (Vector2){ 90.0f, 601.0f }, 1135.0f, "MOVER",
+                        "Clique em uma casa verde ortogonal vazia (custo: 1 Estamina).");
                 } else if (interfaceJogo->acao_combate >= ACAO_TELA_HABILIDADE_0 &&
                            interfaceJogo->acao_combate <= ACAO_TELA_HABILIDADE_2) {
                     int idxHab = interfaceJogo->acao_combate - ACAO_TELA_HABILIDADE_0;
                     char cabecalhoCompacto[160];
-                    char textoBarra[512];
                     formatarCabecalhoHabilidade(interfaceJogo->ator_atual, idxHab, true,
                                                 cabecalhoCompacto, sizeof(cabecalhoCompacto));
-                    (void)snprintf(textoBarra, sizeof(textoBarra), "%s: %s",
-                                   cabecalhoCompacto,
-                                   descricaoHabilidadeDetalhada(interfaceJogo->ator_atual, idxHab));
-                    (void)desenharTextoQuebrado(textoBarra, 90, 601, 1135, 12, 14, GOLD, 600, 629);
+                    DrawDynamicDescriptionBox((Vector2){ 90.0f, 601.0f }, 1135.0f,
+                                              cabecalhoCompacto,
+                                              descricaoHabilidadeDetalhada(
+                                                  interfaceJogo->ator_atual, idxHab));
                 } else {
-                    desenharTexto("Dica: Escolha uma ação abaixo ou clique em DETALHES para ver todas as descrições.",
-                                  90, 608, 14, LIGHTGRAY);
+                    DrawDynamicDescriptionBox(
+                        (Vector2){ 90.0f, 601.0f }, 1135.0f, "DICA",
+                        "Escolha uma ação abaixo ou clique em DETALHES para ver todas as descrições.");
                 }
             }
             DrawUIButtonCustom((Rectangle){ 90.0f, 630.0f, 130.0f, 55.0f },
@@ -3814,16 +4315,11 @@ void descarregarInterface(InterfaceJogo *interfaceJogo)
             UnloadTexture(interfaceJogo->bgMar);
             interfaceJogo->bgMar = (Texture2D){ 0 };
         }
-        for (indice = 0; indice < 5; indice++) {
-            if (interfaceJogo->bgCombatePool[indice].id != 0 &&
-                interfaceJogo->bgCombatePool[indice].id != interfaceJogo->bgNavio.id) {
+        for (indice = 0; indice < 6; indice++) {
+            if (interfaceJogo->bgCombatePool[indice].id != 0) {
                 UnloadTexture(interfaceJogo->bgCombatePool[indice]);
             }
             interfaceJogo->bgCombatePool[indice] = (Texture2D){ 0 };
-        }
-        if (interfaceJogo->bgNavio.id != 0) {
-            UnloadTexture(interfaceJogo->bgNavio);
-            interfaceJogo->bgNavio = (Texture2D){ 0 };
         }
         if (interfaceJogo->bgBoss.id != 0) {
             UnloadTexture(interfaceJogo->bgBoss);
@@ -3841,12 +4337,13 @@ void descarregarInterface(InterfaceJogo *interfaceJogo)
             UnloadTexture(interfaceJogo->texPainelDetalhes);
             interfaceJogo->texPainelDetalhes = (Texture2D){ 0 };
         }
-        if (interfaceJogo->texPainelMochila.id != 0) {
-            UnloadTexture(interfaceJogo->texPainelMochila);
-            interfaceJogo->texPainelMochila = (Texture2D){ 0 };
+        if (interfaceJogo->texBarraStatusUnificada.id != 0) {
+            UnloadTexture(interfaceJogo->texBarraStatusUnificada);
+            interfaceJogo->texBarraStatusUnificada = (Texture2D){ 0 };
         }
         interfaceJogo->qtdBgCombate = 0;
         interfaceJogo->bgCombateAtualIdx = -1;
+        interfaceJogo->bgCombateAnteriorIdx = -1;
         interfaceJogo->bgBossAtivo = false;
         if (interfaceJogo->fonteJogo.texture.id != 0) {
             UnloadFont(interfaceJogo->fonteJogo);
@@ -3854,6 +4351,9 @@ void descarregarInterface(InterfaceJogo *interfaceJogo)
         }
         if (interfaceRenderizada == interfaceJogo) {
             interfaceRenderizada = NULL;
+        }
+        if (gerenciadorFundoCombate == interfaceJogo) {
+            gerenciadorFundoCombate = NULL;
         }
     }
     if (canvasCarregado && canvasVirtual.id != 0) {

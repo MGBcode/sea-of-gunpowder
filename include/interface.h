@@ -39,16 +39,19 @@ typedef struct {
     Texture2D spritesPiratas[5][7];
     Texture2D spritesInimigos[4][4];
     Texture2D bgMar;
-    Texture2D bgNavio;
-    Texture2D bgCombatePool[5];
+    Texture2D bgCombatePool[6];
     int qtdBgCombate;
     int bgCombateAtualIdx;
+    int bgCombateAnteriorIdx;
     Texture2D bgBoss;
     bool bgBossAtivo;
     Texture2D texBtnPadrao;
     Texture2D texFrameRetrato;
     Texture2D texPainelDetalhes;
-    Texture2D texPainelMochila;
+    Texture2D texBarraStatusUnificada;
+    NPatchInfo nPatchBotao;
+    NPatchInfo nPatchFrameRetrato;
+    NPatchInfo nPatchPainelDescricao;
     EstadoTelaPrincipal estado;
     TipoPopupModal popup_ativo;
     AcaoTelaCombate acao_combate;
@@ -108,6 +111,11 @@ typedef struct {
 void DrawUIButtonCustom(Rectangle bounds, const char *text, Texture2D texBotao, Font font);
 void DrawUIPanelCustom(Rectangle bounds, Texture2D texPainel, Color colorFallback);
 void DrawUIFrameCustom(Rectangle bounds, Texture2D texBorda);
+void SelectCombatBackground(bool isBoss);
+void DrawCharacterPortrait(Texture2D portrait, Rectangle bounds);
+void DrawCustomButton(Rectangle bounds, const char *label, bool isHovered, bool isPressed);
+void DrawDynamicDescriptionBox(Vector2 pos, float maxWidth, const char *title,
+                               const char *body);
 
 // Inicializa o estado visual e abre a janela Raylib.
 void inicializarInterface(InterfaceJogo *interfaceJogo);
