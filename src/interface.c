@@ -15,6 +15,17 @@
 #define ALTURA_RENDER_1080P 1080
 #define ESCALA_1080P(v) (((float)(v)) * 1.5f)
 
+enum {
+    SPRITE_PIRATA_BASE,
+    SPRITE_PIRATA_DESCANSO,
+    SPRITE_PIRATA_ACAO_0,
+    SPRITE_PIRATA_ACAO_1,
+    SPRITE_PIRATA_ACAO_2,
+    SPRITE_PIRATA_CAPITAO_TIRO,
+    SPRITE_PIRATA_COZINHEIRO_COMENDO,
+    TOTAL_POSES_SPRITES_PIRATA
+};
+
 static const InterfaceJogo *interfaceRenderizada;
 static RenderTexture2D canvasVirtual;
 static bool canvasCarregado = false;
@@ -1315,11 +1326,51 @@ static Texture2D carregarTexturaOpcional(const char *caminho)
 static Texture2D obterSpritePirata(const InterfaceJogo *interfaceJogo,
                                    const Combatente *unidade)
 {
+    int classe;
+    int pose = SPRITE_PIRATA_BASE;
+    Texture2D textura;
     if (interfaceJogo == NULL || unidade == NULL || !unidade->aliado ||
         unidade->classe < CLASSE_BUCANEIRO || unidade->classe > CLASSE_GAVEA) {
         return (Texture2D){ 0 };
     }
-    return interfaceJogo->spritesPiratas[(int)unidade->classe];
+    classe = (int)unidade->classe;
+    if (unidade->em_descanso) {
+        pose = SPRITE_PIRATA_DESCANSO;
+    } else if (interfaceJogo->pirata_em_animacao == unidade &&
+               interfaceJogo->timer_pose_acao_pirata > 0.0f &&
+               interfaceJogo->pose_acao_sprite_pirata >= SPRITE_PIRATA_ACAO_0 &&
+               interfaceJogo->pose_acao_sprite_pirata < TOTAL_POSES_SPRITES_PIRATA) {
+        pose = interfaceJogo->pose_acao_sprite_pirata;
+    }
+    textura = interfaceJogo->spritesPiratas[classe][pose];
+    if (textura.id == 0 && pose != SPRITE_PIRATA_BASE) {
+        textura = interfaceJogo->spritesPiratas[classe][SPRITE_PIRATA_BASE];
+    }
+    return textura;
+}
+
+// Mantém a pose da habilidade no tabuleiro por um segundo.
+static void registrarPoseAcaoPirata(InterfaceJogo *interfaceJogo,
+                                    Combatente *unidade, int indiceHabilidade,
+                                    int linhaAlvo, int colunaAlvo)
+{
+    int pose;
+    if (interfaceJogo == NULL || unidade == NULL || !unidade->aliado ||
+        unidade->classe < CLASSE_BUCANEIRO || unidade->classe > CLASSE_GAVEA ||
+        indiceHabilidade < 0 || indiceHabilidade >= 3) {
+        return;
+    }
+    pose = SPRITE_PIRATA_ACAO_0 + indiceHabilidade;
+    if (unidade->classe == CLASSE_CAPITAO && indiceHabilidade == 0 &&
+        abs(unidade->linha - linhaAlvo) + abs(unidade->coluna - colunaAlvo) == 2) {
+        pose = SPRITE_PIRATA_CAPITAO_TIRO;
+    } else if (unidade->classe == CLASSE_COZINHEIRO && indiceHabilidade == 0 &&
+               unidade->linha == linhaAlvo && unidade->coluna == colunaAlvo) {
+        pose = SPRITE_PIRATA_COZINHEIRO_COMENDO;
+    }
+    interfaceJogo->pirata_em_animacao = unidade;
+    interfaceJogo->pose_acao_sprite_pirata = pose;
+    interfaceJogo->timer_pose_acao_pirata = 1.0f;
 }
 
 // Desenha a ilustração em coordenadas virtuais sem distorcer sua proporção.
@@ -1347,12 +1398,22 @@ static void desenharSpritePirata(Texture2D textura, Rectangle bounds)
 // Inicializa a janela em 1920x1080 (1080p), o framebuffer 1080p e a fonte TrueType de alta nitidez.
 void inicializarInterface(InterfaceJogo *interfaceJogo)
 {
-    static const char *arquivosSpritesPiratas[5] = {
-        "bucaneiroBase.png", "Timoneiro.png", "cozinheiroBase.png",
-        "capitaoBase.png", "gaveaBase.png"
+    static const char *arquivosSpritesPiratas[5][TOTAL_POSES_SPRITES_PIRATA] = {
+        { "bucaneiroBase.png", "bucaneiroDescanso.png", "bucaneiroCorte.png",
+          "bucaneiroPocketSand.png", "bucaneiroUlt.png", NULL, NULL },
+        { "Timoneiro.png", "TimoneiroDescanso.png", "TimoneiroSocao.png",
+          "TimoneiroSocao.png", "TimoneiroTimonada.png", NULL, NULL },
+        { "cozinheiroBase.png", "cozinheiroDescanso.png",
+          "cozinheiroArremessando.png", "cozinheiroTiro.png", "cozinheiroUlt.png",
+          NULL, "cozinheiroComendo.png" },
+        { "capitaoBase.png", "capitaoDescanso.png", "capitaoCorte.png",
+          "capitaoMotivar.png", "capitaoUlt.png", "capitaoTiro.png", NULL },
+        { "gaveaBase.png", "gaveaDescanso.png", "gaveaTiro.png",
+          "gaveaSoprada.png", "gaveaUlt.png", NULL, NULL }
     };
     int codepoints[224];
     int indice;
+    int pose;
     int fundosCarregados = 0;
     const char *diretorioWindows;
     char caminhoFonte[512];
@@ -1400,10 +1461,17 @@ void inicializarInterface(InterfaceJogo *interfaceJogo)
         TraceLog(LOG_ERROR, "Arquivo assets/textures/bg_mar.png nao encontrado.");
     }
     for (indice = 0; indice < 5; indice++) {
-        char caminhoSprite[160];
-        (void)snprintf(caminhoSprite, sizeof(caminhoSprite), "assets/sprites/%s",
-                       arquivosSpritesPiratas[indice]);
-        interfaceJogo->spritesPiratas[indice] = carregarTexturaOpcional(caminhoSprite);
+        for (pose = 0; pose < TOTAL_POSES_SPRITES_PIRATA; pose++) {
+            char caminhoSprite[160];
+            if (arquivosSpritesPiratas[indice][pose] == NULL) {
+                interfaceJogo->spritesPiratas[indice][pose] = (Texture2D){ 0 };
+                continue;
+            }
+            (void)snprintf(caminhoSprite, sizeof(caminhoSprite), "assets/sprites/%s",
+                           arquivosSpritesPiratas[indice][pose]);
+            interfaceJogo->spritesPiratas[indice][pose] =
+                carregarTexturaOpcional(caminhoSprite);
+        }
     }
     for (indice = 0; indice < 224; indice++) {
         codepoints[indice] = 32 + indice;
@@ -1508,6 +1576,14 @@ void atualizarInterface(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
         interfaceJogo->timer_indicador_dano -= deltaTempo;
         if (interfaceJogo->timer_indicador_dano < 0.0f) {
             interfaceJogo->timer_indicador_dano = 0.0f;
+        }
+    }
+    if (interfaceJogo->timer_pose_acao_pirata > 0.0f) {
+        interfaceJogo->timer_pose_acao_pirata -= deltaTempo;
+        if (interfaceJogo->timer_pose_acao_pirata <= 0.0f) {
+            interfaceJogo->timer_pose_acao_pirata = 0.0f;
+            interfaceJogo->pirata_em_animacao = NULL;
+            interfaceJogo->pose_acao_sprite_pirata = -1;
         }
     }
     rodaMouse = GetMouseWheelMove();
@@ -2139,6 +2215,8 @@ void atualizarInterface(InterfaceJogo *interfaceJogo, Tabuleiro3x6 *mapa,
                 executarAtaqueOuHabilidade(mapa, interfaceJogo->ator_atual, habilidade,
                                            linha, coluna);
                 if (interfaceJogo->ator_atual->estamina_atual < estaminaAntes) {
+                    registrarPoseAcaoPirata(interfaceJogo, interfaceJogo->ator_atual,
+                                            habilidade, linha, coluna);
                     int danoTotal = somarUltimoDanoTabuleiro(mapa);
                     int curaTotal = somarUltimaCuraTabuleiro(mapa);
                     if (danoTotal > 0 || curaTotal > 0) {
@@ -3628,9 +3706,12 @@ void descarregarInterface(InterfaceJogo *interfaceJogo)
     if (interfaceJogo != NULL) {
         int indice;
         for (indice = 0; indice < 5; indice++) {
-            if (interfaceJogo->spritesPiratas[indice].id != 0) {
-                UnloadTexture(interfaceJogo->spritesPiratas[indice]);
-                interfaceJogo->spritesPiratas[indice] = (Texture2D){ 0 };
+            int pose;
+            for (pose = 0; pose < TOTAL_POSES_SPRITES_PIRATA; pose++) {
+                if (interfaceJogo->spritesPiratas[indice][pose].id != 0) {
+                    UnloadTexture(interfaceJogo->spritesPiratas[indice][pose]);
+                    interfaceJogo->spritesPiratas[indice][pose] = (Texture2D){ 0 };
+                }
             }
         }
         if (interfaceJogo->bgMar.id != 0) {

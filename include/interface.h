@@ -36,7 +36,7 @@ typedef enum {
 
 typedef struct {
     Font fonteJogo;
-    Texture2D spritesPiratas[5];
+    Texture2D spritesPiratas[5][7];
     Texture2D bgMar;
     Texture2D bgNavio;
     Texture2D bgCombatePool[5];
@@ -83,6 +83,7 @@ typedef struct {
     float timer_turno_inimigo;
     float timer_destaque_acao;
     float timer_indicador_dano;
+    float timer_pose_acao_pirata;
     int scroll_detalhes;
     int scroll_mochila;
     int linha_destaque_acao;
@@ -92,6 +93,8 @@ typedef struct {
     char log_combate[256];
     Combatente *entidade_selecionada;
     Combatente *ator_atual;
+    Combatente *pirata_em_animacao;
+    int pose_acao_sprite_pirata;
     Combatente inimigos[4];
     EntradaIniciativa fila_iniciativa[MAX_ENTRADAS_INICIATIVA];
     NoRota **rota_atual;
