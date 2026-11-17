@@ -292,17 +292,47 @@ static void desenharTexturaBounds(Texture2D textura, Rectangle bounds)
                    (Vector2){ 0.0f, 0.0f }, 0.0f, WHITE);
 }
 
-static NPatchInfo configurarNPatch(Texture2D textura, int borda)
+static void desenharTexturaCapaTint(Texture2D textura, Rectangle bounds, Color tint)
+{
+    Rectangle origem;
+    float propTex;
+    float propBounds;
+    if (textura.id == 0 || textura.width <= 0 || textura.height <= 0 ||
+        bounds.width <= 0.0f || bounds.height <= 0.0f) {
+        return;
+    }
+    propTex = (float)textura.width / (float)textura.height;
+    propBounds = bounds.width / bounds.height;
+    if (propTex > propBounds) {
+        float largVisivel = (float)textura.height * propBounds;
+        origem = (Rectangle){ ((float)textura.width - largVisivel) * 0.5f, 0.0f,
+                              largVisivel, (float)textura.height };
+    } else {
+        float altVisivel = (float)textura.width / propBounds;
+        origem = (Rectangle){ 0.0f, ((float)textura.height - altVisivel) * 0.5f,
+                              (float)textura.width, altVisivel };
+    }
+    DrawTexturePro(textura, origem, converterBoundsVirtual(bounds),
+                   (Vector2){ 0.0f, 0.0f }, 0.0f, tint);
+}
+
+static NPatchInfo configurarNPatchRec(Texture2D textura, Rectangle recorte,
+                                      int bordaX, int bordaY)
 {
     NPatchInfo info = { 0 };
     if (textura.id == 0) {
         return info;
     }
-    info.source = (Rectangle){ 0.0f, 0.0f, (float)textura.width,
+    if (recorte.width <= 0.0f || recorte.height <= 0.0f) {
+        recorte = (Rectangle){ 0.0f, 0.0f, (float)textura.width,
                                (float)textura.height };
-    info.left = borda < textura.width / 2 ? borda : textura.width / 2;
+    }
+    info.source = recorte;
+    info.left = bordaX < (int)(recorte.width * 0.45f) ?
+                bordaX : (int)(recorte.width * 0.45f);
     info.right = info.left;
-    info.top = borda < textura.height / 2 ? borda : textura.height / 2;
+    info.top = bordaY < (int)(recorte.height * 0.45f) ?
+               bordaY : (int)(recorte.height * 0.45f);
     info.bottom = info.top;
     info.layout = NPATCH_NINE_PATCH;
     return info;
@@ -327,14 +357,72 @@ static NPatchInfo obterInfoNPatch(Texture2D textura)
 static void desenharNPatch(Texture2D textura, NPatchInfo info,
                            Rectangle bounds, Color tint)
 {
+    Rectangle src = info.source;
+    Rectangle dst = converterBoundsVirtual(bounds);
+    float sL = (float)info.left;
+    float sR = (float)info.right;
+    float sT = (float)info.top;
+    float sB = (float)info.bottom;
+    float maxEscalaX;
+    float maxEscalaY;
+    float escala;
+    float dL;
+    float dR;
+    float dT;
+    float dB;
+    float sx[4];
+    float sy[4];
+    float dx[4];
+    float dy[4];
+    int lin;
+    int col;
     if (textura.id == 0 || bounds.width <= 0.0f || bounds.height <= 0.0f) {
         return;
     }
-    if (info.source.width <= 0.0f || info.source.height <= 0.0f) {
+    if (src.width <= 0.0f || src.height <= 0.0f) {
         desenharTexturaBounds(textura, bounds);
-    } else {
-        DrawTextureNPatch(textura, info, converterBoundsVirtual(bounds),
-                          (Vector2){ 0.0f, 0.0f }, 0.0f, tint);
+        return;
+    }
+    maxEscalaX = (sL + sR) > 0.0f ? (dst.width * 0.44f) / (sL + sR) : 0.72f;
+    maxEscalaY = (sT + sB) > 0.0f ? (dst.height * 0.44f) / (sT + sB) : 0.72f;
+    escala = maxEscalaX < maxEscalaY ? maxEscalaX : maxEscalaY;
+    if (escala > 0.72f) {
+        escala = 0.72f;
+    }
+    dL = sL * escala;
+    dR = sR * escala;
+    dT = sT * escala;
+    dB = sB * escala;
+    sx[0] = src.x;
+    sx[1] = src.x + sL;
+    sx[2] = src.x + src.width - sR;
+    sx[3] = src.x + src.width;
+    sy[0] = src.y;
+    sy[1] = src.y + sT;
+    sy[2] = src.y + src.height - sB;
+    sy[3] = src.y + src.height;
+    dx[0] = dst.x;
+    dx[1] = dst.x + dL;
+    dx[2] = dst.x + dst.width - dR;
+    dx[3] = dst.x + dst.width;
+    dy[0] = dst.y;
+    dy[1] = dst.y + dT;
+    dy[2] = dst.y + dst.height - dB;
+    dy[3] = dst.y + dst.height;
+    for (lin = 0; lin < 3; lin++) {
+        for (col = 0; col < 3; col++) {
+            Rectangle recOrigem = {
+                sx[col], sy[lin], sx[col + 1] - sx[col], sy[lin + 1] - sy[lin]
+            };
+            Rectangle recDestino = {
+                dx[col], dy[lin], dx[col + 1] - dx[col], dy[lin + 1] - dy[lin]
+            };
+            if (recOrigem.width > 0.0f && recOrigem.height > 0.0f &&
+                recDestino.width > 0.0f && recDestino.height > 0.0f) {
+                DrawTexturePro(textura, recOrigem, recDestino,
+                               (Vector2){ 0.0f, 0.0f }, 0.0f, tint);
+            }
+        }
     }
 }
 
@@ -352,7 +440,15 @@ static Color obterTintBotao(bool isHovered, bool isPressed)
 void DrawCharacterPortrait(Texture2D portrait, Rectangle bounds)
 {
     if (portrait.id != 0) {
-        desenharSpriteUnidade(portrait, bounds);
+        float margemX = bounds.width * 0.07f;
+        float margemY = bounds.height * 0.07f;
+        Rectangle areaSprite = {
+            bounds.x + margemX,
+            bounds.y + margemY,
+            bounds.width - margemX * 2.0f,
+            bounds.height - margemY * 2.0f
+        };
+        desenharSpriteUnidade(portrait, areaSprite);
     }
     if (interfaceRenderizada != NULL) {
         desenharNPatch(interfaceRenderizada->texFrameRetrato,
@@ -365,8 +461,13 @@ void DrawCustomButton(Rectangle bounds, const char *label, bool isHovered, bool 
     Texture2D botao = interfaceRenderizada != NULL ?
                       interfaceRenderizada->texBtnPadrao : (Texture2D){ 0 };
     Font fonte = obterFonteInterface();
-    float tamanhoFonte = bounds.height * 0.34f;
+    float tamanhoFonte = bounds.height * 0.30f;
     Rectangle render = converterBoundsVirtual(bounds);
+    if (tamanhoFonte > 20.0f) {
+        tamanhoFonte = 20.0f;
+    } else if (tamanhoFonte < 13.0f) {
+        tamanhoFonte = 13.0f;
+    }
     if (botao.id != 0) {
         desenharNPatch(botao, interfaceRenderizada->nPatchBotao, bounds,
                        obterTintBotao(isHovered, isPressed));
@@ -378,14 +479,24 @@ void DrawCustomButton(Rectangle bounds, const char *label, bool isHovered, bool 
     }
     if (label != NULL) {
         Vector2 tamanhoTexto;
+        Vector2 posTexto;
+        float larguraMaxRender = render.width - 26.0f;
         if (fonte.texture.id == 0) {
             fonte = GetFontDefault();
         }
         tamanhoTexto = MeasureTextEx(fonte, label, tamanhoFonte * 1.5f, 1.5f);
-        DrawTextEx(fonte, label,
-                   (Vector2){ render.x + (render.width - tamanhoTexto.x) / 2.0f,
-                              render.y + (render.height - tamanhoTexto.y) / 2.0f },
-                   tamanhoFonte * 1.5f, 1.5f, RAYWHITE);
+        if (larguraMaxRender > 20.0f && tamanhoTexto.x > larguraMaxRender) {
+            tamanhoFonte *= larguraMaxRender / tamanhoTexto.x;
+            tamanhoTexto = MeasureTextEx(fonte, label, tamanhoFonte * 1.5f, 1.5f);
+        }
+        posTexto = (Vector2){
+            render.x + (render.width - tamanhoTexto.x) / 2.0f,
+            render.y + (render.height - tamanhoTexto.y) / 2.0f
+        };
+        DrawTextEx(fonte, label, (Vector2){ posTexto.x + 1.5f, posTexto.y + 1.5f },
+                   tamanhoFonte * 1.5f, 1.5f, (Color){ 6, 10, 14, 220 });
+        DrawTextEx(fonte, label, posTexto,
+                   tamanhoFonte * 1.5f, 1.5f, isHovered ? GOLD : RAYWHITE);
     }
 }
 
@@ -408,7 +519,10 @@ void DrawUIButtonCustom(Rectangle bounds, const char *text, Texture2D texBotao, 
     if (text != NULL) {
         Vector2 tamanhoTexto;
         Rectangle boundsRender = converterBoundsVirtual(bounds);
-        float tamanhoFonte = bounds.height * 0.34f;
+        float tamanhoFonte = bounds.height * 0.30f;
+        if (tamanhoFonte > 20.0f) {
+            tamanhoFonte = 20.0f;
+        }
         if (font.texture.id == 0) {
             font = GetFontDefault();
         }
@@ -1849,8 +1963,7 @@ void inicializarInterface(InterfaceJogo *interfaceJogo)
     interfaceJogo->pirata_posicionando_indice = -1;
     interfaceJogo->indice_iniciativa = -1;
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT);
-    InitWindow(LARGURA_VIRTUAL, ALTURA_VIRTUAL,
-               "Sea Of Gunpowder - Crônicas de Sangue e Pólvora");
+    InitWindow(LARGURA_VIRTUAL, ALTURA_VIRTUAL, "Sea Of Gunpowder");
     MaximizeWindow();
     SetExitKey(KEY_NULL);
     SetWindowMinSize(960, 540);
@@ -1921,11 +2034,15 @@ void inicializarInterface(InterfaceJogo *interfaceJogo)
         TraceLog(LOG_ERROR,
                  "Nao foi possivel carregar assets/ui/barra_status_unificada.png.");
     }
-    interfaceJogo->nPatchBotao = configurarNPatch(interfaceJogo->texBtnPadrao, 24);
+    interfaceJogo->nPatchBotao =
+        configurarNPatchRec(interfaceJogo->texBtnPadrao,
+                            (Rectangle){ 10.0f, 8.0f, 614.0f, 128.0f }, 52, 48);
     interfaceJogo->nPatchFrameRetrato =
-        configurarNPatch(interfaceJogo->texFrameRetrato, 24);
+        configurarNPatchRec(interfaceJogo->texFrameRetrato,
+                            (Rectangle){ 10.0f, 8.0f, 474.0f, 482.0f }, 82, 82);
     interfaceJogo->nPatchPainelDescricao =
-        configurarNPatch(interfaceJogo->texPainelDetalhes, 24);
+        configurarNPatchRec(interfaceJogo->texPainelDetalhes,
+                            (Rectangle){ 10.0f, 6.0f, 326.0f, 526.0f }, 48, 48);
     diretorioWindows = getenv("WINDIR");
     if (diretorioWindows == NULL || diretorioWindows[0] == '\0') {
         diretorioWindows = getenv("SystemRoot");
@@ -3069,16 +3186,23 @@ static void formatarCabecalhoHabilidade(const Combatente *unidade, int indiceHab
 // Desenha o menu de pause acionado pela tecla ESC com opções Retornar e Voltar ao Menu.
 static void desenharMenuPause(void)
 {
-    DrawRectangle(0, 0, LARGURA_VIRTUAL, ALTURA_VIRTUAL, (Color){ 6, 10, 15, 195 });
-    DrawRectangle(420, 190, 440, 290, (Color){ 15, 24, 34, 252 });
-    DrawRectangleLinesEx((Rectangle){ 420.0f, 190.0f, 440.0f, 290.0f }, 3.0f, GOLD);
-    desenharTexto("JOGO PAUSADO", 535, 225, 28, GOLD);
-    DrawRectangle(490, 300, 300, 58, (Color){ 45, 125, 70, 255 });
-    DrawRectangleLines(490, 300, 300, 58, RAYWHITE);
-    desenharTexto("RETORNAR", 582, 318, 20, RAYWHITE);
-    DrawRectangle(490, 380, 300, 58, (Color){ 145, 48, 38, 255 });
-    DrawRectangleLines(490, 380, 300, 58, RAYWHITE);
-    desenharTexto("VOLTAR AO MENU", 545, 398, 20, RAYWHITE);
+    Texture2D texPainel = interfaceRenderizada != NULL ?
+                          interfaceRenderizada->texPainelDetalhes : (Texture2D){ 0 };
+    Texture2D texBotao = interfaceRenderizada != NULL ?
+                         interfaceRenderizada->texBtnPadrao : (Texture2D){ 0 };
+    DrawRectangle(0, 0, LARGURA_VIRTUAL, ALTURA_VIRTUAL, (Color){ 6, 10, 15, 200 });
+    DrawUIPanelCustom((Rectangle){ 420.0f, 190.0f, 440.0f, 290.0f },
+                      texPainel, (Color){ 15, 24, 34, 252 });
+    desenharTextoCentralizadoContornado("JOGO PAUSADO",
+                                        (Rectangle){ 420.0f, 218.0f, 440.0f, 36.0f },
+                                        26, GOLD);
+    desenharTextoCentralizado("Pressione ESC para retornar à partida", 260, 14, LIGHTGRAY);
+    DrawUIButtonCustom((Rectangle){ 490.0f, 300.0f, 300.0f, 58.0f },
+                       "RETORNAR", texBotao, obterFonteInterface());
+    DrawRectangleLines(490, 300, 300, 58, (Color){ 80, 210, 115, 220 });
+    DrawUIButtonCustom((Rectangle){ 490.0f, 380.0f, 300.0f, 58.0f },
+                       "VOLTAR AO MENU", texBotao, obterFonteInterface());
+    DrawRectangleLines(490, 380, 300, 58, (Color){ 215, 80, 65, 220 });
 }
 
 // Desenha a ficha completa de status, passivas, ataques e build com suporte ao scroll do mouse.
@@ -3088,77 +3212,78 @@ static void desenharDetalhes(const InterfaceJogo *interfaceJogo, const Combatent
     int offsetY;
     int posY;
     int barraY;
-    int minY = 112;
-    int maxY = 588;
+    int minY = 114;
+    int maxY = 584;
     if (unidade == NULL || interfaceJogo == NULL) {
         return;
     }
     offsetY = interfaceJogo->scroll_detalhes;
     DrawUIPanelCustom((Rectangle){ 160.0f, 50.0f, 740.0f, 555.0f },
                       interfaceJogo->texPainelDetalhes, (Color){ 12, 19, 27, 252 });
-    posY = 116 - offsetY;
+    DrawRectangle(176, 112, 696, 474, (Color){ 12, 20, 28, 190 });
+    posY = 120 - offsetY;
     if (posY >= minY && posY + 24 <= maxY) {
-        desenharTexto(unidade->nome, 185, posY, 23, unidade->aliado ? SKYBLUE : ORANGE);
+        desenharTexto(unidade->nome, 188, posY, 22, unidade->aliado ? SKYBLUE : ORANGE);
     }
     posY += 28;
-    posY += desenharTextoQuebrado(descricaoResumoPersonagem(unidade), 185, posY, 680,
-                                  15, 19, GOLD, minY, maxY) + 8;
+    posY += desenharTextoQuebrado(descricaoResumoPersonagem(unidade), 188, posY, 674,
+                                  14, 18, GOLD, minY, maxY) + 8;
     if (posY >= minY && posY + 16 <= maxY) {
         if (unidade->eh_boss) {
             desenharTexto(TextFormat("PV %d/%d | Estamina %d/%d | Fase %d | Velocidades: 8, 6 e 4",
                                      unidade->vida_atual, unidade->vida_maxima,
                                      unidade->estamina_atual, unidade->estamina_maxima,
                                      unidade->fase_boss),
-                          185, posY, 16, RAYWHITE);
+                          188, posY, 15, RAYWHITE);
         } else {
             desenharTexto(TextFormat("PV %d/%d | Estamina %d/%d | Nível %d | Velocidade %d | Ações/Turno: %d",
                                      unidade->vida_atual, unidade->vida_maxima,
                                      unidade->estamina_atual, unidade->estamina_maxima,
                                      unidade->nivel, unidade->velocidade,
                                      calcularAcoesPorTurno(unidade)),
-                          185, posY, 15, RAYWHITE);
+                          188, posY, 15, RAYWHITE);
         }
     }
     posY += 22;
     if (posY >= minY && posY + 15 <= maxY) {
         if (unidade->aliado && unidade->classe == CLASSE_COZINHEIRO) {
             desenharTexto("Cura Garantida (sem erro) | Dano do Bacamarte varia conforme a distância",
-                          185, posY, 14, LIGHTGRAY);
+                          188, posY, 14, LIGHTGRAY);
         } else {
             desenharTexto(TextFormat("Chance Dano Máx (Precisão): Melee %d%% | Ranged %d%% | Bônus Nv +%d%%",
                                      unidade->precisao_melee, unidade->precisao_ranged,
                                      unidade->dano_base),
-                          185, posY, 14, LIGHTGRAY);
+                          188, posY, 14, LIGHTGRAY);
         }
     }
     posY += 24;
     if (posY >= minY && posY + 16 <= maxY) {
-        desenharTexto("EFEITOS ATIVOS (BUFFS / DEBUFFS):", 185, posY, 15, GOLD);
-        desenharIndicadoresStatusUnidade(unidade, 445, posY - 2, 410);
+        desenharTexto("EFEITOS ATIVOS (BUFFS / DEBUFFS):", 188, posY, 15, GOLD);
+        desenharIndicadoresStatusUnidade(unidade, 448, posY - 2, 410);
     }
     posY += 26;
     if (posY >= minY && posY + 16 <= maxY) {
-        desenharTexto("PASSIVAS E COMPORTAMENTO", 185, posY, 16, GOLD);
+        desenharTexto("PASSIVAS E COMPORTAMENTO", 188, posY, 16, GOLD);
     }
     posY += 22;
     if (unidade->aliado) {
         posY += desenharTextoQuebrado(descricaoPassiva(unidade->classe, false), 192, posY,
-                                      675, 14, 18, RAYWHITE, minY, maxY) + 6;
+                                      670, 14, 18, RAYWHITE, minY, maxY) + 6;
         posY += desenharTextoQuebrado(descricaoPassiva(unidade->classe, true), 192, posY,
-                                      675, 14, 18,
+                                      670, 14, 18,
                                       unidade->passiva_aprimorada ? GREEN : GRAY,
                                       minY, maxY) + 10;
     } else {
         if (unidade->eh_elite) {
             posY += desenharTextoQuebrado(
                 "ELITE: +25% de vida, +3 de estamina e 3 ações por turno.",
-                192, posY, 675, 14, 18, GOLD, minY, maxY) + 6;
+                192, posY, 670, 14, 18, GOLD, minY, maxY) + 6;
         }
         posY += desenharTextoQuebrado(descricaoPassivaInimigo(unidade), 192, posY,
-                                      675, 14, 18, RAYWHITE, minY, maxY) + 10;
+                                      670, 14, 18, RAYWHITE, minY, maxY) + 10;
     }
     if (posY >= minY && posY + 16 <= maxY) {
-        desenharTexto("HABILIDADES E AÇÕES", 185, posY, 16, GOLD);
+        desenharTexto("HABILIDADES E AÇÕES", 188, posY, 16, GOLD);
     }
     posY += 22;
     for (indice = 0; indice < MAX_HABILIDADES; indice++) {
@@ -3166,25 +3291,29 @@ static void desenharDetalhes(const InterfaceJogo *interfaceJogo, const Combatent
         bool desbloqueada = indice < unidade->habilidades_desbloqueadas;
         char cabecalho[192];
         int alturaCard = 84;
+        int topoVisivel;
+        int baseVisivel;
         if (habilidade->nome[0] == '\0') {
             continue;
         }
         formatarCabecalhoHabilidade(unidade, indice, false, cabecalho, sizeof(cabecalho));
-        if (posY + alturaCard >= minY && posY <= maxY) {
-            DrawUIPanelCustom((Rectangle){ 185.0f, (float)posY, 680.0f,
-                                           (float)alturaCard },
-                              interfaceJogo->texPainelDetalhes,
-                              (Color){ 20, 32, 44, 255 });
-            if (!desbloqueada) {
-                DrawRectangleLines(185, posY, 680, alturaCard, DARKGRAY);
-            }
+        topoVisivel = posY < minY ? minY : posY;
+        baseVisivel = (posY + alturaCard) > maxY ? maxY : (posY + alturaCard);
+        if (baseVisivel > topoVisivel) {
+            DrawRectangle(185, topoVisivel, 678, baseVisivel - topoVisivel,
+                          desbloqueada ? (Color){ 22, 36, 48, 245 } :
+                                         (Color){ 18, 24, 30, 235 });
+            DrawRectangle(185, topoVisivel, 4, baseVisivel - topoVisivel,
+                          desbloqueada ? GOLD : DARKGRAY);
+            DrawRectangleLines(185, topoVisivel, 678, baseVisivel - topoVisivel,
+                               desbloqueada ? (Color){ 185, 155, 85, 220 } : DARKGRAY);
         }
         if (posY + 4 >= minY && posY + 18 <= maxY) {
-            desenharTexto(cabecalho, 193, posY + 4, 13, desbloqueada ? RAYWHITE : GRAY);
+            desenharTexto(cabecalho, 195, posY + 4, 13, desbloqueada ? GOLD : GRAY);
         }
         (void)desenharTextoQuebrado(descricaoHabilidadeDetalhada(unidade, indice),
-                                    193, posY + 22, 664, 13, 17,
-                                    desbloqueada ? GOLD : GRAY, minY, maxY);
+                                    195, posY + 23, 660, 13, 17,
+                                    desbloqueada ? RAYWHITE : GRAY, minY, maxY);
         posY += alturaCard + 8;
     }
     if (unidade->aliado) {
@@ -3192,7 +3321,7 @@ static void desenharDetalhes(const InterfaceJogo *interfaceJogo, const Combatent
         if (posY >= minY && posY + 16 <= maxY) {
             desenharTexto(TextFormat("BUILD PASSIVA EQUIPADA (%d/%d)",
                                      unidade->build_passivos.tamanho,
-                                     MAX_ITENS_PASSIVOS), 185, posY, 16, GOLD);
+                                     MAX_ITENS_PASSIVOS), 188, posY, 16, GOLD);
         }
         posY += 22;
         if (unidade->build_passivos.inicio == NULL) {
@@ -3209,23 +3338,21 @@ static void desenharDetalhes(const InterfaceJogo *interfaceJogo, const Combatent
                 (void)snprintf(textoSlot, sizeof(textoSlot), "[Slot %d - %s] %s: %s",
                                slot, nomeRaridadeItem(item->item.raridade),
                                item->item.nome, descricaoItemCatalogo(item->item.id));
-                posY += desenharTextoQuebrado(textoSlot, 192, posY, 672, 14, 18,
+                posY += desenharTextoQuebrado(textoSlot, 192, posY, 668, 14, 18,
                                               corItem, minY, maxY) + 6;
                 slot++;
             }
         }
     }
-    DrawRectangle(161, 51, 738, 60, (Color){ 12, 19, 27, 255 });
-    DrawRectangle(161, 589, 738, 15, (Color){ 12, 19, 27, 255 });
-    DrawUIFrameCustom((Rectangle){ 160.0f, 50.0f, 740.0f, 555.0f },
-                      interfaceJogo->texFrameRetrato);
-    desenharTexto("FICHA DE INSPEÇÃO DO PERSONAGEM", 185, 68, 21, GOLD);
-    desenharTexto("Role com o Scroll do Mouse", 535, 74, 14, LIGHTGRAY);
+    DrawRectangle(175, 62, 710, 50, (Color){ 18, 30, 42, 255 });
+    DrawRectangle(175, 111, 710, 2, GOLD);
+    desenharTexto("FICHA DE INSPEÇÃO DO PERSONAGEM", 185, 72, 20, GOLD);
+    desenharTexto("Scroll: rolar ficha", 575, 78, 13, LIGHTGRAY);
     DrawUIButtonCustom((Rectangle){ 760.0f, 68.0f, 85.0f, 38.0f },
                        "FECHAR", interfaceJogo->texBtnPadrao, obterFonteInterface());
-    DrawRectangle(880, 115, 8, 472, (Color){ 28, 40, 52, 255 });
-    barraY = 115 + (offsetY * 392) / 420;
-    DrawRectangle(880, barraY, 8, 80, GOLD);
+    DrawRectangle(876, 116, 8, 468, (Color){ 24, 36, 48, 255 });
+    barraY = 116 + (offsetY * 388) / 420;
+    DrawRectangle(876, barraY, 8, 80, GOLD);
 }
 
 // Desenha os cards dos piratas e o botão para iniciar ou retomar a aventura.
@@ -3241,16 +3368,20 @@ void desenharTelaSelecaoGrupo(InterfaceJogo *interfaceJogo,
              totalDisponiveis : TOTAL_PIRATAS_PREDEFINIDOS;
     interfaceRenderizada = interfaceJogo;
     iniciarQuadroVirtual(interfaceJogo, (Color){ 18, 28, 39, 255 });
-    desenharTexto(contadorFugas > 0 ?
-                  "REPOSIÇÃO DE TRIPULAÇÃO PÓS-FUGA" :
-                  "ESCOLHA SUA TRIPULAÇÃO",
-                  contadorFugas > 0 ? 310 : 370, 42, 30, GOLD);
-    desenharTexto(contadorFugas > 0 ?
-                  TextFormat("Selecione substitutos para os caídos (%d/3) - Mortos voltaram ao Nv 1 sem passivos",
-                             interfaceJogo->total_selecionados) :
-                  TextFormat("Selecione 3 piratas para a expedição (%d/3)",
-                             interfaceJogo->total_selecionados),
-                  contadorFugas > 0 ? 220 : 420, 92, 18, RAYWHITE);
+    DrawRectangle(0, 0, LARGURA_VIRTUAL, ALTURA_VIRTUAL, (Color){ 8, 16, 26, 110 });
+    DrawUIPanelCustom((Rectangle){ 170.0f, 18.0f, 940.0f, 108.0f },
+                      interfaceJogo->texPainelDetalhes, (Color){ 14, 24, 34, 245 });
+    desenharTextoCentralizadoContornado(
+        contadorFugas > 0 ? "REPOSIÇÃO DE TRIPULAÇÃO PÓS-FUGA" :
+                            "ESCOLHA SUA TRIPULAÇÃO PIRATA",
+        (Rectangle){ 170.0f, 30.0f, 940.0f, 38.0f }, 28, GOLD);
+    desenharTextoCentralizado(
+        contadorFugas > 0 ?
+        TextFormat("Selecione substitutos para os caídos (%d/3) — Mortos voltaram ao Nv 1 sem passivos",
+                   interfaceJogo->total_selecionados) :
+        TextFormat("Selecione 3 piratas para embarcar na expedição (%d/3 selecionados)",
+                   interfaceJogo->total_selecionados),
+        80, 17, RAYWHITE);
     for (indice = 0; indice < limite; indice++) {
         int cardX = 60 + (indice % 3) * 390;
         int cardY = 145 + (indice / 3) * 205;
@@ -3258,45 +3389,66 @@ void desenharTelaSelecaoGrupo(InterfaceJogo *interfaceJogo,
                                                    piratasDisponiveis[indice].id) >= 0;
         bool sobreviventeFixo = ehSobreviventeFixoFuga(interfaceJogo,
                                                        piratasDisponiveis[indice].id);
-        Color borda = selecionado ? (Color){ 90, 220, 120, 255 } :
-                                    (Color){ 150, 165, 175, 255 };
-        DrawRectangle(cardX, cardY, 350, 180, (Color){ 42, 63, 76, 255 });
-        DrawRectangleLinesEx((Rectangle){ (float)cardX, (float)cardY, 350, 180 },
-                             selecionado ? 4.0f : 2.0f, borda);
-        desenharSpriteUnidade(obterSpriteBasePirata(interfaceJogo,
+        Rectangle retratoRect = { (float)(cardX + 14), (float)(cardY + 18), 76.0f, 112.0f };
+        DrawUIPanelCustom((Rectangle){ (float)cardX, (float)cardY, 350.0f, 180.0f },
+                          interfaceJogo->texPainelDetalhes, (Color){ 24, 40, 52, 248 });
+        if (selecionado) {
+            DrawRectangle(cardX + 6, cardY + 6, 338, 168, (Color){ 45, 115, 75, 45 });
+            DrawRectangleLinesEx((Rectangle){ (float)cardX + 2.0f, (float)cardY + 2.0f,
+                                              346.0f, 176.0f },
+                                 3.0f, sobreviventeFixo ? SKYBLUE : (Color){ 95, 230, 130, 255 });
+        }
+        DrawRectangle((int)retratoRect.x + 2, (int)retratoRect.y + 2,
+                      (int)retratoRect.width - 4, (int)retratoRect.height - 4,
+                      selecionado ? (Color){ 32, 68, 92, 255 } : (Color){ 20, 32, 44, 255 });
+        DrawCharacterPortrait(obterSpriteBasePirata(interfaceJogo,
                                                     &piratasDisponiveis[indice]),
-                              (Rectangle){ (float)(cardX + 12), (float)(cardY + 24),
-                                           72.0f, 108.0f });
-        desenharTexto(piratasDisponiveis[indice].nome, cardX + 96, cardY + 14, 20, RAYWHITE);
+                              retratoRect);
+        desenharTexto(piratasDisponiveis[indice].nome, cardX + 100, cardY + 15, 20,
+                      selecionado ? GOLD : RAYWHITE);
         if (piratasDisponiveis[indice].classe == CLASSE_COZINHEIRO) {
             desenharTexto(TextFormat("HP %d | Cura Garantida | Vel %d",
                                      piratasDisponiveis[indice].vida_maxima,
                                      piratasDisponiveis[indice].velocidade),
-                          cardX + 96, cardY + 52, 14, LIGHTGRAY);
+                          cardX + 100, cardY + 45, 13, RAYWHITE);
         } else {
             desenharTexto(TextFormat("HP %d | Precisão %d%% | Vel %d",
                                      piratasDisponiveis[indice].vida_maxima,
                                      piratasDisponiveis[indice].precisao_melee,
                                      piratasDisponiveis[indice].velocidade),
-                          cardX + 96, cardY + 52, 14, LIGHTGRAY);
+                          cardX + 100, cardY + 45, 13, RAYWHITE);
         }
-        desenharTexto(TextFormat("Estamina %d | Nível %d | Passivos %d",
+        desenharTexto(TextFormat("Estamina %d | Nível %d | Passivos %d/5",
                                  piratasDisponiveis[indice].estamina_maxima,
                                  piratasDisponiveis[indice].nivel,
                                  piratasDisponiveis[indice].build_passivos.tamanho),
-                      cardX + 96, cardY + 82, 14, LIGHTGRAY);
-        desenharTexto(sobreviventeFixo ? "MANTIDO" :
-                      (selecionado ? "SELECIONADO" : "Selecionar"),
-                      cardX + 96, cardY + 144, 13,
-                      sobreviventeFixo ? SKYBLUE : (selecionado ? GOLD : GRAY));
-        DrawRectangle(cardX + 230, cardY + 138, 108, 32, (Color){ 28, 42, 54, 255 });
-        DrawRectangleLines(cardX + 230, cardY + 138, 108, 32, GOLD);
-        desenharTexto("DETALHES", cardX + 244, cardY + 147, 13, GOLD);
+                      cardX + 100, cardY + 66, 13, LIGHTGRAY);
+        desenharBarraStatusCombatente(interfaceJogo, &piratasDisponiveis[indice],
+                                      (Rectangle){ (float)(cardX + 100),
+                                                   (float)(cardY + 89),
+                                                   234.0f, 40.0f }, 10);
+        DrawRectangle(cardX + 14, cardY + 138, 206, 32,
+                      selecionado ? (Color){ 28, 62, 46, 225 } : (Color){ 18, 28, 38, 215 });
+        DrawRectangleLines(cardX + 14, cardY + 138, 206, 32,
+                           sobreviventeFixo ? SKYBLUE :
+                           (selecionado ? (Color){ 95, 230, 130, 255 } : DARKGRAY));
+        desenharTexto(sobreviventeFixo ? "SOBREVIVENTE MANTIDO" :
+                      (selecionado ? "SELECIONADO NA TRIPULAÇÃO" : "Clique para selecionar"),
+                      cardX + 22, cardY + 146, 12,
+                      sobreviventeFixo ? SKYBLUE : (selecionado ? GOLD : LIGHTGRAY));
+        DrawUIButtonCustom((Rectangle){ (float)(cardX + 230), (float)(cardY + 138),
+                                        108.0f, 32.0f },
+                           "DETALHES", interfaceJogo->texBtnPadrao, obterFonteInterface());
     }
-    DrawRectangle(440, 590, 400, 60, interfaceJogo->total_selecionados == 3 ?
-                  (Color){ 45, 125, 70, 255 } : (Color){ 65, 70, 75, 255 });
-    desenharTexto(contadorFugas > 0 ? "RETOMAR AVENTURA" : "INICIAR AVENTURA",
-                  515, 608, 22, RAYWHITE);
+    DrawUIButtonCustom((Rectangle){ 440.0f, 590.0f, 400.0f, 60.0f },
+                       contadorFugas > 0 ? "RETOMAR AVENTURA" : "INICIAR AVENTURA",
+                       interfaceJogo->texBtnPadrao, obterFonteInterface());
+    if (interfaceJogo->total_selecionados == 3) {
+        DrawRectangleLinesEx((Rectangle){ 440.0f, 590.0f, 400.0f, 60.0f },
+                             3.0f, (Color){ 95, 230, 130, 255 });
+    } else {
+        DrawRectangle(440, 590, 400, 60, (Color){ 10, 14, 20, 135 });
+    }
     if (interfaceJogo->popup_ativo == POPUP_DETALHES_PERSONAGEM) {
         desenharDetalhes(interfaceJogo, interfaceJogo->entidade_selecionada);
     } else if (interfaceJogo->popup_ativo == POPUP_PAUSE) {
@@ -3314,11 +3466,9 @@ static void desenharMochila(const InterfaceJogo *interfaceJogo)
     const Combatente *selecionado = interfaceJogo->entidade_selecionada;
     bool somenteConsumiveis = interfaceJogo->estado == TELA_COMBATE_3X6 &&
                               !interfaceJogo->fase_pre_combate_ativa;
-    DrawUIPanelCustom((Rectangle){ 160.0f, 50.0f, 700.0f, 555.0f },
+    DrawUIPanelCustom((Rectangle){ 160.0f, 50.0f, 700.0f, 565.0f },
                       interfaceJogo->texPainelDetalhes, (Color){ 12, 19, 27, 252 });
-    DrawUIFrameCustom((Rectangle){ 160.0f, 50.0f, 700.0f, 555.0f },
-                      interfaceJogo->texFrameRetrato);
-    desenharTexto("MOCHILA DA TRIPULAÇÃO E BUILDS PASSIVAS", 180, 68, 20, GOLD);
+    desenharTexto("MOCHILA DA TRIPULAÇÃO E BUILDS PASSIVAS", 180, 68, 19, GOLD);
     desenharTexto("Scroll: rolar itens", 595, 73, 13, LIGHTGRAY);
     DrawUIButtonCustom((Rectangle){ 740.0f, 68.0f, 105.0f, 38.0f },
                        interfaceJogo->loja_aberta_pendente ? "VOLTAR LOJA" : "FECHAR",
@@ -3330,7 +3480,7 @@ static void desenharMochila(const InterfaceJogo *interfaceJogo)
         bool morto = idPirata >= 1 && idPirata <= 5 &&
                      interfaceJogo->piratas_mortos[idPirata - 1];
         DrawRectangle(posAbaX, 112, 205, 36,
-                      abaAtiva ? (Color){ 45, 95, 130, 255 } : (Color){ 28, 42, 54, 255 });
+                      abaAtiva ? (Color){ 42, 88, 122, 255 } : (Color){ 22, 34, 46, 255 });
         DrawRectangleLines(posAbaX, 112, 205, 36, abaAtiva ? GOLD : GRAY);
         desenharTexto(morto ? TextFormat("%s - MORTO", nomePirataPorId(idPirata)) :
                               nomePirataPorId(idPirata),
@@ -3354,10 +3504,10 @@ static void desenharMochila(const InterfaceJogo *interfaceJogo)
         posLinhaY = 178 + indice * 48 - interfaceJogo->scroll_mochila;
         if (posLinhaY >= 172 && posLinhaY <= 325) {
             bool selecionadoItem = item->item.id == interfaceJogo->item_id_selecionado;
-            DrawUIPanelCustom((Rectangle){ 180.0f, (float)posLinhaY, 650.0f, 44.0f },
-                              interfaceJogo->texPainelDetalhes,
-                              selecionadoItem ? (Color){ 48, 65, 78, 255 } :
-                                                (Color){ 26, 40, 52, 255 });
+            DrawRectangle(180, posLinhaY, 650, 44,
+                          selecionadoItem ? (Color){ 38, 58, 74, 255 } :
+                                            (Color){ 20, 32, 44, 250 });
+            DrawRectangle(180, posLinhaY, 5, 44, selecionadoItem ? GOLD : corRaridade);
             DrawRectangleLines(180, posLinhaY, 650, 44,
                                selecionadoItem ? GOLD : corRaridade);
             desenharTexto(TextFormat("[%s | %s] %s (x%d)",
@@ -3366,18 +3516,24 @@ static void desenharMochila(const InterfaceJogo *interfaceJogo)
                                      "EQUIPAR",
                                      nomeRaridadeItem(item->item.raridade),
                                      item->item.nome, item->item.quantidade),
-                          188, posLinhaY + 2, 13, corRaridade);
+                          192, posLinhaY + 3, 13, corRaridade);
             (void)desenharTextoQuebrado(descricaoItemCatalogo(item->item.id),
-                                        188, posLinhaY + 17, 634, 12, 14,
-                                        corRaridade, 174, 368);
+                                        192, posLinhaY + 18, 630, 12, 14,
+                                        RAYWHITE, 174, 368);
         }
         indice++;
     }
     if (indice == 0) {
-        DrawRectangle(180, 195, 650, 55, (Color){ 22, 33, 44, 255 });
+        DrawRectangle(180, 195, 650, 55, (Color){ 20, 32, 44, 245 });
+        DrawRectangleLines(180, 195, 650, 55, GRAY);
         desenharTexto("Mochila vazia! Conquiste itens vencendo rotas ou comprando na Loja.",
                       205, 214, 15, LIGHTGRAY);
     }
+    desenharTexto(interfaceJogo->item_id_selecionado > 0 ?
+                  "Consumível selecionado pronto para uso no pirata da aba ativa:" :
+                  "Clique em um consumível da lista acima para habilitar o botão USAR:",
+                  180, 380, 13,
+                  interfaceJogo->item_id_selecionado > 0 ? GOLD : LIGHTGRAY);
     DrawUIButtonCustom((Rectangle){ 690.0f, 372.0f, 135.0f, 32.0f },
                        "USAR", interfaceJogo->texBtnPadrao, obterFonteInterface());
     if (interfaceJogo->item_id_selecionado > 0) {
@@ -3414,23 +3570,24 @@ static void desenharMochila(const InterfaceJogo *interfaceJogo)
             int posSlotY = posicaoYSlotBuild(slot);
             if (passivo != NULL) {
                 Color corPassivo = corRaridadeItem(passivo->item.raridade);
-                DrawRectangle(180, posSlotY, 650, 31, (Color){ 28, 45, 42, 255 });
+                DrawRectangle(180, posSlotY, 650, 31, (Color){ 22, 38, 42, 255 });
+                DrawRectangle(180, posSlotY, 5, 31, corPassivo);
                 DrawRectangleLines(180, posSlotY, 650, 31, corPassivo);
                 desenharTexto(TextFormat("[Slot %d - %s] %s",
                                          slot + 1,
                                          nomeRaridadeItem(passivo->item.raridade),
                                          passivo->item.nome),
-                              188, posSlotY + 2, 12, corPassivo);
+                              192, posSlotY + 2, 12, corPassivo);
                 (void)desenharTextoQuebrado(descricaoItemCatalogo(passivo->item.id),
-                                            188, posSlotY + 16, 634, 11, 13,
-                                            corPassivo, posSlotY, posSlotY + 31);
+                                            192, posSlotY + 16, 630, 11, 13,
+                                            RAYWHITE, posSlotY, posSlotY + 31);
                 passivo = passivo->proximo;
             } else {
-                DrawRectangle(180, posSlotY, 650, 31, (Color){ 18, 28, 36, 255 });
+                DrawRectangle(180, posSlotY, 650, 31, (Color){ 16, 26, 34, 255 });
                 DrawRectangleLines(180, posSlotY, 650, 31, DARKGRAY);
                 desenharTexto(TextFormat("[Slot %d Vazio - Disponível para item passivo]",
                                          slot + 1),
-                              188, posSlotY + 9, 12, GRAY);
+                              192, posSlotY + 9, 12, GRAY);
             }
         }
     }
@@ -3440,64 +3597,71 @@ static void desenharMochila(const InterfaceJogo *interfaceJogo)
 static void desenharLoja(const InterfaceJogo *interfaceJogo)
 {
     int indice;
-    DrawRectangle(160, 55, 700, 545, (Color){ 12, 19, 27, 252 });
-    DrawRectangleLines(160, 55, 700, 545, GOLD);
-    desenharTexto("LOJA OPCIONAL - compras não avançam a rota", 225, 75, 22, GOLD);
-    DrawRectangle(740, 72, 105, 38, (Color){ 60, 75, 87, 255 });
-    desenharTexto("FECHAR [X]", 750, 84, 14, RAYWHITE);
-    desenharTexto(TextFormat("Moedas de Ouro: %d | Saques realizados: %d (Inflação +%d%%)",
+    DrawUIPanelCustom((Rectangle){ 160.0f, 55.0f, 700.0f, 545.0f },
+                      interfaceJogo->texPainelDetalhes, (Color){ 12, 19, 27, 252 });
+    desenharTexto("LOJA DO PORTO — Compras não avançam a rota", 185, 76, 19, GOLD);
+    DrawUIButtonCustom((Rectangle){ 740.0f, 72.0f, 105.0f, 38.0f },
+                       "FECHAR", interfaceJogo->texBtnPadrao, obterFonteInterface());
+    DrawRectangle(185, 120, 650, 36, (Color){ 18, 30, 42, 235 });
+    DrawRectangleLines(185, 120, 650, 36, (Color){ 165, 135, 75, 200 });
+    desenharTexto(TextFormat("Moedas de Ouro: %d   |   Saques realizados: %d (Inflação +%d%%)",
                              interfaceJogo->moedas == NULL ? 0 : *interfaceJogo->moedas,
                              contadorSaques, contadorSaques * 25),
-                  190, 128, 16, RAYWHITE);
+                  200, 130, 15, RAYWHITE);
     for (indice = 0; indice < interfaceJogo->total_itens_loja; indice++) {
         const Item *item = &interfaceJogo->itens_loja[indice];
         int estoque = interfaceJogo->estoques_loja[indice];
         int preco = aplicarInflacaoLoja(item->preco);
         int posItemY = 175 + indice * 92;
         Color corRaridade = corRaridadeItem(item->raridade);
-        Color corFundo = estoque > 0 ? (Color){ 28, 44, 58, 255 } :
-                                       (Color){ 35, 35, 40, 255 };
+        Color corFundo = estoque > 0 ? (Color){ 22, 36, 48, 252 } :
+                                       (Color){ 28, 30, 34, 240 };
         DrawRectangle(190, posItemY, 640, 78, corFundo);
+        DrawRectangle(190, posItemY, 6, 78, estoque > 0 ? corRaridade : GRAY);
         DrawRectangleLines(190, posItemY, 640, 78, estoque > 0 ? corRaridade : GRAY);
-        desenharTexto(TextFormat("[%s] %s | Preço: %d ouros | Estoque: %d/2",
+        desenharTexto(TextFormat("[%s] %s   |   Preço: %d ouros   |   Estoque: %d/2",
                                  nomeRaridadeItem(item->raridade),
                                  item->nome, preco, estoque),
-                      206, posItemY + 6, 16, estoque > 0 ? corRaridade : GRAY);
-        (void)desenharTextoQuebrado(descricaoItemCatalogo(item->id), 206, posItemY + 28,
-                                    612, 13, 17, estoque > 0 ? corRaridade : DARKGRAY, 0, 0);
+                      206, posItemY + 8, 16, estoque > 0 ? corRaridade : GRAY);
+        (void)desenharTextoQuebrado(descricaoItemCatalogo(item->id), 206, posItemY + 32,
+                                    612, 13, 17, estoque > 0 ? RAYWHITE : DARKGRAY, 0, 0);
     }
-    DrawRectangle(185, 495, 200, 55, (Color){ 45, 95, 130, 255 });
-    DrawRectangleLines(185, 495, 200, 55, GOLD);
-    desenharTexto("MOCHILA / USAR", 215, 514, 16, RAYWHITE);
-    DrawRectangle(400, 495, 215, 55, (Color){ 145, 45, 38, 255 });
-    desenharTexto("SAQUEAR / AVANÇAR", 414, 514, 16, RAYWHITE);
-    DrawRectangle(630, 495, 195, 55, (Color){ 45, 115, 68, 255 });
-    desenharTexto("SEGUIR VIAGEM", 658, 514, 16, RAYWHITE);
+    DrawUIButtonCustom((Rectangle){ 185.0f, 495.0f, 200.0f, 55.0f },
+                       "MOCHILA / USAR", interfaceJogo->texBtnPadrao, obterFonteInterface());
+    DrawUIButtonCustom((Rectangle){ 400.0f, 495.0f, 215.0f, 55.0f },
+                       "SAQUEAR LOJA", interfaceJogo->texBtnPadrao, obterFonteInterface());
+    DrawRectangleLines(400, 495, 215, 55, (Color){ 215, 75, 60, 225 });
+    DrawUIButtonCustom((Rectangle){ 630.0f, 495.0f, 195.0f, 55.0f },
+                       "SEGUIR VIAGEM", interfaceJogo->texBtnPadrao, obterFonteInterface());
+    DrawRectangleLines(630, 495, 195, 55, (Color){ 85, 210, 115, 225 });
 }
 
 // Desenha o pop-up modal de confirmação de desistência ("Fugir da Aventura").
 static void desenharConfirmacaoFuga(const InterfaceJogo *interfaceJogo)
 {
-    DrawRectangle(210, 200, 620, 295, (Color){ 12, 19, 27, 252 });
-    DrawRectangleLines(210, 200, 620, 295, GOLD);
-    desenharTexto("Fugir da Aventura (Retornar à Rota 1)?", 295, 235, 22, GOLD);
+    DrawUIPanelCustom((Rectangle){ 210.0f, 200.0f, 620.0f, 295.0f },
+                      interfaceJogo->texPainelDetalhes, (Color){ 12, 19, 27, 252 });
+    desenharTexto("Fugir da Aventura (Retornar à Rota 1)?", 295, 228, 22, GOLD);
     desenharTexto(TextFormat("Fugas usadas: %d/2 | Ouro mantido: %d",
                              contadorFugas,
                              interfaceJogo->moedas == NULL ? 0 : *interfaceJogo->moedas),
-                  300, 265, 15, GOLD);
-    desenharTexto("Piratas vivos mantêm nível e itens equipados nas builds.", 265, 295, 15, RAYWHITE);
-    desenharTexto("Piratas mortos podem ser reescolhidos no Nv 1 (sem passivos).", 260, 325, 15, SKYBLUE);
+                  300, 262, 15, GOLD);
+    desenharTexto("Piratas vivos mantêm nível e itens equipados nas builds.", 255, 294, 15, RAYWHITE);
+    desenharTexto("Piratas mortos podem ser reescolhidos no Nv 1 (sem passivos).", 255, 322, 15, SKYBLUE);
     desenharTexto(contadorFugas == 0 ?
                   "Itens da mochila serão perdidos; inimigos recebem +50% de status." :
                   "Itens da mochila serão perdidos; inimigos recebem +75% de status.",
-                  260, 355, 15, ORANGE);
-    DrawRectangle(350, 420, 150, 50, contadorFugas < 2 ?
-                  (Color){ 140, 50, 40, 255 } : (Color){ 65, 70, 75, 255 });
-    DrawRectangle(530, 420, 150, 50, (Color){ 60, 75, 87, 255 });
-    desenharTexto(contadorFugas < 2 ? "FUGIR" : "LIMITE 2/2",
-                  contadorFugas < 2 ? 395 : 364, 436, 18,
-                  contadorFugas < 2 ? RAYWHITE : GRAY);
-    desenharTexto("CANCELAR", 554, 436, 18, RAYWHITE);
+                  255, 350, 15, ORANGE);
+    DrawUIButtonCustom((Rectangle){ 350.0f, 420.0f, 150.0f, 50.0f },
+                       contadorFugas < 2 ? "FUGIR" : "LIMITE 2/2",
+                       interfaceJogo->texBtnPadrao, obterFonteInterface());
+    if (contadorFugas >= 2) {
+        DrawRectangle(350, 420, 150, 50, (Color){ 10, 14, 18, 150 });
+    } else {
+        DrawRectangleLines(350, 420, 150, 50, (Color){ 215, 75, 60, 225 });
+    }
+    DrawUIButtonCustom((Rectangle){ 530.0f, 420.0f, 150.0f, 50.0f },
+                       "CANCELAR", interfaceJogo->texBtnPadrao, obterFonteInterface());
 }
 
 static void desenharConfirmacaoEscolha(const InterfaceJogo *interfaceJogo,
@@ -3506,8 +3670,9 @@ static void desenharConfirmacaoEscolha(const InterfaceJogo *interfaceJogo,
     const char *titulo;
     const char *mensagem;
     char texto[192];
-    DrawRectangle(310, 215, 660, 270, (Color){ 12, 19, 27, 252 });
-    DrawRectangleLines(310, 215, 660, 270, GOLD);
+    DrawRectangle(0, 0, LARGURA_VIRTUAL, ALTURA_VIRTUAL, (Color){ 6, 10, 15, 165 });
+    DrawUIPanelCustom((Rectangle){ 310.0f, 215.0f, 660.0f, 270.0f },
+                      interfaceJogo->texPainelDetalhes, (Color){ 12, 19, 27, 252 });
     if (compra) {
         int indice = interfaceJogo->indice_compra_pendente;
         titulo = "CONFIRMAR COMPRA";
@@ -3522,45 +3687,52 @@ static void desenharConfirmacaoEscolha(const InterfaceJogo *interfaceJogo,
     } else {
         titulo = "CONFIRMAR CAMINHO";
         if (interfaceJogo->escolha_rota_pendente == 2) {
-            mensagem = "Escolher o Caminho 2? (3 inimigos)";
+            mensagem = "Escolher o Caminho 2? (3 inimigos | +50% Cura | +2 Itens)";
         } else if (interfaceJogo->escolha_rota_pendente == 1 &&
                    interfaceJogo->rota_atual != NULL &&
                    *interfaceJogo->rota_atual != NULL &&
                    (*interfaceJogo->rota_atual)->etapa >= 3) {
-            mensagem = "Enfrentar Barba Negra?";
+            mensagem = "Enfrentar o temível Barba Negra no Combate Final?";
         } else {
-            mensagem = "Escolher o Caminho 1? (4 inimigos)";
+            mensagem = "Escolher o Caminho 1? (4 inimigos | +2 Níveis | +700 Ouros)";
         }
     }
-    desenharTexto(titulo, 495, 265, 26, GOLD);
-    desenharTextoCentralizado(mensagem, 330, 20, RAYWHITE);
-    DrawRectangle(390, 390, 180, 55, (Color){ 45, 125, 70, 255 });
-    DrawRectangleLines(390, 390, 180, 55, GOLD);
-    desenharTexto("CONFIRMAR", 414, 407, 17, RAYWHITE);
-    DrawRectangle(610, 390, 180, 55, (Color){ 60, 75, 87, 255 });
-    desenharTexto("CANCELAR", 648, 407, 17, RAYWHITE);
+    desenharTextoCentralizadoContornado(
+        titulo, (Rectangle){ 310.0f, 245.0f, 660.0f, 36.0f }, 25, GOLD);
+    desenharTextoCentralizado(mensagem, 320, 18, RAYWHITE);
+    DrawUIButtonCustom((Rectangle){ 390.0f, 390.0f, 180.0f, 55.0f },
+                       "CONFIRMAR", interfaceJogo->texBtnPadrao, obterFonteInterface());
+    DrawRectangleLines(390, 390, 180, 55, (Color){ 85, 215, 120, 230 });
+    DrawUIButtonCustom((Rectangle){ 610.0f, 390.0f, 180.0f, 55.0f },
+                       "CANCELAR", interfaceJogo->texBtnPadrao, obterFonteInterface());
 }
 
 static void desenharRecompensas(const InterfaceJogo *interfaceJogo)
 {
     int indice;
-    DrawRectangle(320, 175, 640, 390, (Color){ 12, 19, 27, 252 });
-    DrawRectangleLines(320, 175, 640, 390, GOLD);
-    desenharTexto("RECOMPENSAS DO COMBATE", 465, 205, 24, GOLD);
+    DrawRectangle(0, 0, LARGURA_VIRTUAL, ALTURA_VIRTUAL, (Color){ 6, 10, 15, 165 });
+    DrawUIPanelCustom((Rectangle){ 320.0f, 175.0f, 640.0f, 390.0f },
+                      interfaceJogo->texPainelDetalhes, (Color){ 12, 19, 27, 252 });
+    desenharTextoCentralizadoContornado(
+        "RECOMPENSAS DO COMBATE", (Rectangle){ 320.0f, 200.0f, 640.0f, 34.0f }, 24, GOLD);
     if (interfaceJogo->total_itens_recompensa == 0) {
-        desenharTexto("Nenhum item foi obtido neste combate.", 430, 280, 17, LIGHTGRAY);
+        desenharTexto("Nenhum item adicional foi obtido neste combate.", 420, 280, 17, LIGHTGRAY);
     }
     for (indice = 0; indice < interfaceJogo->total_itens_recompensa; indice++) {
         const Item *item = &interfaceJogo->itens_recompensa[indice];
-        int posY = 260 + indice * 42;
-        DrawRectangle(385, posY, 510, 34, (Color){ 26, 40, 52, 255 });
-        DrawRectangleLines(385, posY, 510, 34, corRaridadeItem(item->raridade));
-        desenharTexto(TextFormat("%s (x%d)", item->nome, item->quantidade),
-                      405, posY + 8, 15, corRaridadeItem(item->raridade));
+        int posY = 252 + indice * 36;
+        Color corRar = corRaridadeItem(item->raridade);
+        DrawRectangle(385, posY, 510, 32, (Color){ 22, 36, 48, 255 });
+        DrawRectangle(385, posY, 5, 32, corRar);
+        DrawRectangleLines(385, posY, 510, 32, corRar);
+        desenharTexto(TextFormat("[%s] %s (x%d)",
+                                 nomeRaridadeItem(item->raridade),
+                                 item->nome, item->quantidade),
+                      402, posY + 7, 15, corRar);
     }
-    DrawRectangle(530, 470, 220, 55, (Color){ 45, 125, 70, 255 });
+    DrawUIButtonCustom((Rectangle){ 530.0f, 470.0f, 220.0f, 55.0f },
+                       "CONTINUAR", interfaceJogo->texBtnPadrao, obterFonteInterface());
     DrawRectangleLines(530, 470, 220, 55, GOLD);
-    desenharTexto("CONTINUAR", 580, 487, 18, RAYWHITE);
 }
 
 // Desenha a barra superior da fila de iniciativa com ordem de turnos clara e sem números soltos.
@@ -3568,7 +3740,8 @@ static void desenharFila(const InterfaceJogo *interfaceJogo)
 {
     int indice;
     int slotVisivel = 0;
-    DrawRectangle(0, 0, LARGURA_VIRTUAL, 62, (Color){ 10, 17, 24, 230 });
+    DrawUIPanelCustom((Rectangle){ 4.0f, 4.0f, 462.0f, 54.0f },
+                      interfaceJogo->texPainelDetalhes, (Color){ 10, 17, 24, 240 });
     for (indice = 0; indice < interfaceJogo->total_iniciativa && slotVisivel < 9; indice++) {
         Combatente *ator = interfaceJogo->fila_iniciativa[indice].ator;
         int posCardX = posicaoXSlotFila(slotVisivel);
@@ -3576,6 +3749,9 @@ static void desenharFila(const InterfaceJogo *interfaceJogo)
         if (ator == NULL || !ator->vivo) {
             continue;
         }
+        DrawRectangle(posCardX + 2, 9, 41, 41,
+                      ator->aliado ? (Color){ 28, 64, 92, 245 } :
+                                     (Color){ 105, 38, 32, 245 });
         {
             Texture2D retrato = obterSpriteUnidade(interfaceJogo, ator);
             DrawCharacterPortrait(retrato,
@@ -3585,9 +3761,15 @@ static void desenharFila(const InterfaceJogo *interfaceJogo)
                               posCardX + 16, 18, 19, RAYWHITE);
             }
         }
+        DrawRectangle(posCardX + 2, 8, 16, 13, (Color){ 10, 16, 22, 220 });
+        desenharTexto(TextFormat("%d", slotVisivel + 1), posCardX + 5, 8, 10,
+                      turnoAtivo ? GOLD : LIGHTGRAY);
         if (turnoAtivo) {
             DrawRectangleLinesEx((Rectangle){ (float)posCardX, 7.0f, 45.0f, 45.0f },
-                                 3.0f, GOLD);
+                                 2.5f, GOLD);
+        } else if (ator == interfaceJogo->entidade_selecionada) {
+            DrawRectangleLinesEx((Rectangle){ (float)posCardX, 7.0f, 45.0f, 45.0f },
+                                 2.0f, SKYBLUE);
         }
         slotVisivel++;
     }
@@ -3596,9 +3778,10 @@ static void desenharFila(const InterfaceJogo *interfaceJogo)
 static void desenharHUDAtorAtivo(const InterfaceJogo *interfaceJogo)
 {
     const Combatente *ator;
-    Rectangle retrato = { 928.0f, 8.0f, 88.0f, 88.0f };
-    Rectangle barraStatus = { 1028.0f, 66.0f, 220.0f, 72.0f };
-    Rectangle nomeAtor = { 1028.0f, 12.0f, 220.0f, 28.0f };
+    Rectangle retrato = { 930.0f, 15.0f, 94.0f, 114.0f };
+    Rectangle barraStatus = { 1034.0f, 66.0f, 224.0f, 64.0f };
+    Rectangle nomeAtor = { 1034.0f, 14.0f, 224.0f, 24.0f };
+    Rectangle infoAtor = { 1034.0f, 39.0f, 224.0f, 20.0f };
     Color corGrupo;
     if (interfaceJogo == NULL) {
         return;
@@ -3607,26 +3790,34 @@ static void desenharHUDAtorAtivo(const InterfaceJogo *interfaceJogo)
     if ((ator == NULL || !ator->vivo) && interfaceJogo->fase_pre_combate_ativa) {
         ator = interfaceJogo->entidade_selecionada;
     }
-    DrawUIPanelCustom((Rectangle){ 920.0f, 4.0f, 350.0f, 150.0f },
+    DrawUIPanelCustom((Rectangle){ 916.0f, 4.0f, 356.0f, 140.0f },
                       interfaceJogo->texPainelDetalhes, (Color){ 12, 19, 27, 245 });
     corGrupo = ator != NULL && !ator->aliado ?
-               (Color){ 135, 45, 38, 255 } : (Color){ 35, 75, 105, 255 };
-    DrawRectangleRec(converterBoundsVirtual(retrato), corGrupo);
+               (Color){ 115, 38, 32, 255 } : (Color){ 28, 64, 92, 255 };
+    DrawRectangle((int)retrato.x + 3, (int)retrato.y + 3,
+                  (int)retrato.width - 6, (int)retrato.height - 6, corGrupo);
     {
         Texture2D texturaRetrato = ator == NULL ? (Texture2D){ 0 } :
                                    obterSpriteUnidade(interfaceJogo, ator);
         DrawCharacterPortrait(texturaRetrato, retrato);
         if (ator != NULL && texturaRetrato.id == 0) {
             desenharTexto(TextFormat("%c", ator->nome[0] == '\0' ? '?' : ator->nome[0]),
-                          962, 34, 30, RAYWHITE);
+                          965, 52, 30, RAYWHITE);
         }
     }
     if (ator != NULL) {
-        desenharTextoCentralizadoContornado(ator->nome, nomeAtor, 14,
+        desenharTextoCentralizadoContornado(ator->nome, nomeAtor, 15,
                                             ator->aliado ? SKYBLUE : ORANGE);
+        desenharTextoCentralizadoContornado(
+            ator->eh_boss ? TextFormat("Chefe Fase %d | Vel %d", ator->fase_boss, ator->velocidade) :
+                            TextFormat("Nível %d | Vel %d | %s",
+                                       ator->nivel, ator->velocidade,
+                                       ator->aliado ? "Aliado" : "Inimigo"),
+            infoAtor, 12, GOLD);
         desenharBarraStatusCombatente(interfaceJogo, ator, barraStatus, 11);
     } else {
-        desenharTexto("PRE-COMBATE", 1028, 15, 16, GOLD);
+        desenharTexto("PRÉ-COMBATE", 1034, 24, 16, GOLD);
+        desenharTexto("Selecione uma unidade", 1034, 52, 13, LIGHTGRAY);
     }
 }
 
@@ -3690,7 +3881,7 @@ static void desenharPreenchimentoStatus(Rectangle area, float proporcao,
         };
         DrawRectangle((int)vazio.x, (int)vazio.y, (int)vazio.width,
                       (int)vazio.height,
-                      (Color){ 10, 12, 14, 190 });
+                      (Color){ 10, 12, 14, 205 });
     }
     if (desenharPartePreenchida) {
         DrawRectangle((int)area.x, (int)area.y, (int)(area.width * proporcao),
@@ -3702,23 +3893,23 @@ static void desenharBarraStatusCombatente(const InterfaceJogo *interfaceJogo,
                                           const Combatente *unidade,
                                           Rectangle bounds, int tamanhoTexto)
 {
-    const float margemX = 0.07f;
-    const float larguraPreenchimento = 0.86f;
+    const float margemX = 0.068f;
+    const float larguraPreenchimento = 0.866f;
     float proporcaoVida = calcularProporcaoStatus(unidade->vida_atual,
                                                    unidade->vida_maxima);
     float proporcaoEstamina = calcularProporcaoStatus(unidade->estamina_atual,
                                                       unidade->estamina_maxima);
     Rectangle areaVida = {
         bounds.x + bounds.width * margemX,
-        bounds.y + bounds.height * 0.19f,
+        bounds.y + bounds.height * 0.190f,
         bounds.width * larguraPreenchimento,
-        bounds.height * 0.27f
+        bounds.height * 0.248f
     };
     Rectangle areaEstamina = {
         bounds.x + bounds.width * margemX,
-        bounds.y + bounds.height * 0.55f,
+        bounds.y + bounds.height * 0.565f,
         bounds.width * larguraPreenchimento,
-        bounds.height * 0.27f
+        bounds.height * 0.248f
     };
     if (interfaceJogo->texBarraStatusUnificada.id != 0) {
         desenharTexturaBounds(interfaceJogo->texBarraStatusUnificada, bounds);
@@ -3749,24 +3940,6 @@ typedef struct {
     Rectangle squareBounds;
 } UnidadeOrdenadaTabuleiro;
 
-static float calcularDeslocamentoVerticalUnidade(Rectangle quadrado,
-                                                 float alturaBarra)
-{
-    float alturaRender = canvasCarregado && canvasVirtual.id != 0 ?
-                         (float)canvasVirtual.texture.height :
-                         (float)GetScreenHeight();
-    float alturaVirtualVisivel = alturaRender / 1.5f;
-    float yBarra = quadrado.y + quadrado.height + CHARACTER_STATUS_GAP +
-                   CHARACTER_VERTICAL_OFFSET;
-    float yBarraMaximo = alturaVirtualVisivel - BOTTOM_SCREEN_MARGIN - alturaBarra;
-    float deslocamento = CHARACTER_VERTICAL_OFFSET;
-
-    if (alturaVirtualVisivel > 0.0f && yBarra > yBarraMaximo) {
-        deslocamento -= yBarra - yBarraMaximo;
-    }
-    return deslocamento;
-}
-
 static void desenharUnidadeTabuleiro(const InterfaceJogo *interfaceJogo,
                                      Combatente *unidade, Rectangle quadrado)
 {
@@ -3774,53 +3947,53 @@ static void desenharUnidadeTabuleiro(const InterfaceJogo *interfaceJogo,
     Rectangle nomeBounds;
     Rectangle barraStatus;
     Texture2D sprite = obterSpriteUnidade(interfaceJogo, unidade);
-    float alturaSprite = quadrado.height * CHARACTER_BASE_HEIGHT_RATIO *
-                         CHARACTER_VISUAL_SCALE;
+    float alturaSprite = 72.0f;
     float larguraSprite = sprite.width > 0 && sprite.height > 0 ?
                           alturaSprite * (float)sprite.width / (float)sprite.height :
-                          alturaSprite * 0.67f;
-    float larguraBarra = quadrado.width * CHARACTER_STATUS_WIDTH_RATIO *
-                         CHARACTER_VISUAL_SCALE;
-    float alturaBarra = CHARACTER_BASE_STATUS_HEIGHT * CHARACTER_VISUAL_SCALE;
-    float deslocamentoVertical = calcularDeslocamentoVerticalUnidade(quadrado,
-                                                                     alturaBarra);
-    int tamanhoFonte = (int)(CHARACTER_BASE_FONT_SIZE * CHARACTER_VISUAL_SCALE + 0.5f);
-
+                          54.0f;
+    float larguraBarra = quadrado.width - 28.0f;
+    float alturaBarra = 30.0f;
+    if (larguraSprite > quadrado.width - 28.0f) {
+        larguraSprite = quadrado.width - 28.0f;
+    }
     spriteBounds = (Rectangle){
         quadrado.x + (quadrado.width - larguraSprite) * 0.5f,
-        quadrado.y + quadrado.height - alturaSprite + deslocamentoVertical,
+        quadrado.y + 21.0f,
         larguraSprite, alturaSprite
     };
     desenharSpriteUnidade(sprite, spriteBounds);
+    if (sprite.id == 0) {
+        DrawRectangle((int)quadrado.x + 56, (int)quadrado.y + 26, 64, 60,
+                      unidade->aliado ? (Color){ 35, 85, 125, 230 } :
+                                        (Color){ 135, 45, 38, 230 });
+        DrawRectangleLines((int)quadrado.x + 56, (int)quadrado.y + 26, 64, 60, GOLD);
+        desenharTextoCentralizadoContornado(
+            unidade->eh_boss ? "BN" : TextFormat("%c", unidade->nome[0]),
+            (Rectangle){ quadrado.x + 56.0f, quadrado.y + 38.0f, 64.0f, 36.0f },
+            22, GOLD);
+    }
+    nomeBounds = (Rectangle){
+        quadrado.x + 14.0f,
+        quadrado.y + 5.0f,
+        quadrado.width - 28.0f,
+        15.0f
+    };
+    DrawRectangle((int)nomeBounds.x, (int)nomeBounds.y,
+                  (int)nomeBounds.width, (int)nomeBounds.height,
+                  (Color){ 8, 14, 22, 205 });
     if (unidade->eh_elite) {
-        DrawCircle((int)quadrado.x + 10, (int)quadrado.y + 10, 5, GOLD);
+        DrawCircle((int)nomeBounds.x + 8, (int)nomeBounds.y + 7, 4.0f, GOLD);
     }
-    if (unidade == interfaceJogo->ator_atual &&
-        !interfaceJogo->fase_pre_combate_ativa) {
-        DrawRectangleLinesEx(quadrado, 3.0f,
-                             unidade->aliado ? GREEN : ORANGE);
-    }
-    if (unidade == interfaceJogo->entidade_selecionada) {
-        DrawRectangleLinesEx((Rectangle){ quadrado.x + 2.0f, quadrado.y + 2.0f,
-                                           quadrado.width - 4.0f,
-                                           quadrado.height - 4.0f },
-                             2.0f, GOLD);
-    }
-
+    desenharTextoCentralizadoContornado(unidade->nome, nomeBounds, 11,
+                                        unidade->aliado ? SKYBLUE : ORANGE);
     barraStatus = (Rectangle){
         quadrado.x + (quadrado.width - larguraBarra) * 0.5f,
-        quadrado.y + quadrado.height + CHARACTER_STATUS_GAP + deslocamentoVertical,
+        quadrado.y + quadrado.height - alturaBarra - 5.0f,
         larguraBarra, alturaBarra
     };
-    nomeBounds = (Rectangle){
-        quadrado.x + (quadrado.width - larguraBarra) * 0.5f,
-        quadrado.y + quadrado.height - alturaSprite - CHARACTER_NAME_GAP -
-            CHARACTER_BASE_NAME_HEIGHT * CHARACTER_VISUAL_SCALE + deslocamentoVertical,
-        larguraBarra, CHARACTER_BASE_NAME_HEIGHT * CHARACTER_VISUAL_SCALE
-    };
-    desenharTextoCentralizadoContornado(unidade->nome, nomeBounds, tamanhoFonte,
-                                        unidade->aliado ? SKYBLUE : ORANGE);
-    desenharBarraStatusCombatente(interfaceJogo, unidade, barraStatus, tamanhoFonte);
+    desenharBarraStatusCombatente(interfaceJogo, unidade, barraStatus, 9);
+    desenharIndicadoresStatusUnidade(unidade, (int)quadrado.x + 8,
+                                     (int)quadrado.y + 22, 66);
 }
 
 // Desenha o tabuleiro 3x6 contínuo, zonas de preparação, alcance, minas e unidades.
@@ -3835,21 +4008,41 @@ static void desenharTabuleiro(const InterfaceJogo *interfaceJogo,
     Combatente *unidadeHovered = NULL;
     float hoveredY = -1.0f;
     Vector2 mouse = obterMouseVirtual();
+    Rectangle molduraTabuleiro = {
+        (float)(interfaceJogo->margem_esquerda - 8),
+        (float)(interfaceJogo->margem_superior - 6),
+        (float)(COLUNAS_TABULEIRO * interfaceJogo->largura_celula + 12),
+        (float)(LINHAS_TABULEIRO * interfaceJogo->altura_celula + 8)
+    };
+    DrawRectangle((int)molduraTabuleiro.x, (int)molduraTabuleiro.y,
+                  (int)molduraTabuleiro.width, (int)molduraTabuleiro.height,
+                  (Color){ 8, 14, 22, 130 });
+    DrawUIFrameCustom(molduraTabuleiro, interfaceJogo->texFrameRetrato);
     for (linha = 0; linha < LINHAS_TABULEIRO; linha++) {
         for (coluna = 0; coluna < COLUNAS_TABULEIRO; coluna++) {
             int posX = interfaceJogo->margem_esquerda + coluna * interfaceJogo->largura_celula;
             int posY = interfaceJogo->margem_superior + linha * interfaceJogo->altura_celula;
+            int largCel = interfaceJogo->largura_celula - 4;
+            int altCel = interfaceJogo->altura_celula - 4;
+            Rectangle rectCelula = { (float)posX, (float)posY, (float)largCel, (float)altCel };
             Combatente *unidade = mapa->celulas[linha][coluna];
-            Color cor = (Color){ 42, 63, 76, 255 };
+            Color tintPainel = (Color){ 215, 225, 235, 195 };
+            Color tintMoldura = (Color){ 200, 185, 150, 215 };
             const NoCelula *marcada;
             if (interfaceJogo->fase_pre_combate_ativa && coluna <= 1) {
-                cor = (Color){ 38, 82, 95, 255 };
+                tintPainel = (Color){ 155, 225, 245, 220 };
+                tintMoldura = SKYBLUE;
+            } else if (unidade == NULL || !unidade->vivo) {
+                tintPainel = (Color){ 185, 200, 215, 155 };
+                tintMoldura = (Color){ 175, 165, 140, 175 };
             }
-            if (unidade == NULL || !unidade->vivo) {
-                cor.a = 128;
+            if (interfaceJogo->texPainelDetalhes.id != 0) {
+                desenharNPatch(interfaceJogo->texPainelDetalhes,
+                               interfaceJogo->nPatchPainelDescricao,
+                               rectCelula, tintPainel);
+            } else {
+                DrawRectangle(posX, posY, largCel, altCel, (Color){ 24, 38, 50, 165 });
             }
-            DrawRectangle(posX, posY, interfaceJogo->largura_celula - 4,
-                          interfaceJogo->altura_celula - 4, cor);
             if (!interfaceJogo->fase_pre_combate_ativa &&
                 interfaceJogo->acao_combate == ACAO_TELA_MOVER &&
                 interfaceJogo->ator_atual != NULL &&
@@ -3858,63 +4051,65 @@ static void desenharTabuleiro(const InterfaceJogo *interfaceJogo,
                 int distMov = abs(linha - interfaceJogo->ator_atual->linha) +
                               abs(coluna - interfaceJogo->ator_atual->coluna);
                 if (distMov >= 1 && distMov <= passoMovimento) {
-                    DrawRectangle(posX, posY, interfaceJogo->largura_celula - 4,
-                                  interfaceJogo->altura_celula - 4,
-                                  (Color){ 55, 165, 95, 120 });
+                    DrawRectangle(posX + 5, posY + 5, largCel - 10, altCel - 10,
+                                  (Color){ 45, 175, 90, 130 });
+                    tintMoldura = (Color){ 95, 240, 130, 255 };
                 }
             }
             if (alcance != NULL) {
                 for (marcada = alcance->inicio; marcada != NULL; marcada = marcada->proximo) {
                     if (marcada->linha == linha && marcada->coluna == coluna) {
-                        DrawRectangle(posX, posY, interfaceJogo->largura_celula - 4,
-                                      interfaceJogo->altura_celula - 4,
+                        DrawRectangle(posX + 5, posY + 5, largCel - 10, altCel - 10,
                                       marcada->perigo_fogo_amigo ?
-                                      (Color){ 195, 45, 35, 165 } :
-                                      (Color){ 210, 165, 35, 130 });
+                                      (Color){ 195, 45, 35, 150 } :
+                                      (Color){ 215, 168, 35, 130 });
+                        tintMoldura = marcada->perigo_fogo_amigo ? RED : GOLD;
                     }
                 }
+            }
+            if (unidade != NULL && unidade->vivo) {
+                if (unidade == interfaceJogo->ator_atual &&
+                    !interfaceJogo->fase_pre_combate_ativa) {
+                    tintMoldura = unidade->aliado ? (Color){ 95, 240, 130, 255 } : ORANGE;
+                } else if (unidade == interfaceJogo->entidade_selecionada) {
+                    tintMoldura = GOLD;
+                }
+            }
+            if (interfaceJogo->texFrameRetrato.id != 0) {
+                desenharNPatch(interfaceJogo->texFrameRetrato,
+                               interfaceJogo->nPatchFrameRetrato,
+                               rectCelula, tintMoldura);
+            } else {
+                DrawRectangleLines(posX, posY, largCel, altCel, tintMoldura);
+            }
+            if (unidade != NULL && unidade->vivo &&
+                unidade == interfaceJogo->ator_atual &&
+                !interfaceJogo->fase_pre_combate_ativa) {
+                DrawRectangleLinesEx((Rectangle){ (float)posX + 2.0f, (float)posY + 2.0f,
+                                                   (float)largCel - 4.0f, (float)altCel - 4.0f },
+                                     2.5f, unidade->aliado ? GREEN : ORANGE);
+            } else if (unidade != NULL && unidade->vivo &&
+                       unidade == interfaceJogo->entidade_selecionada) {
+                DrawRectangleLinesEx((Rectangle){ (float)posX + 2.0f, (float)posY + 2.0f,
+                                                   (float)largCel - 4.0f, (float)altCel - 4.0f },
+                                     2.0f, GOLD);
             }
             if (interfaceJogo->timer_destaque_acao > 0.0f) {
                 if (linha == interfaceJogo->linha_destaque_acao &&
                     coluna == interfaceJogo->coluna_destaque_acao) {
-                    DrawRectangle(posX, posY, interfaceJogo->largura_celula - 4,
-                                  interfaceJogo->altura_celula - 4,
-                                  (Color){ 235, 85, 45, 135 });
-                    DrawRectangleLinesEx((Rectangle){ (float)posX, (float)posY,
-                                                       (float)interfaceJogo->largura_celula - 4,
-                                                       (float)interfaceJogo->altura_celula - 4 },
-                                         4.0f, RED);
+                    DrawRectangle(posX + 5, posY + 5, largCel - 10, altCel - 10,
+                                  (Color){ 235, 85, 45, 125 });
+                    DrawRectangleLinesEx(rectCelula, 3.5f, RED);
                 } else if (linha == interfaceJogo->linha_origem_acao &&
                            coluna == interfaceJogo->coluna_origem_acao) {
-                    DrawRectangleLinesEx((Rectangle){ (float)posX, (float)posY,
-                                                       (float)interfaceJogo->largura_celula - 4,
-                                                       (float)interfaceJogo->altura_celula - 4 },
-                                         3.0f, ORANGE);
+                    DrawRectangleLinesEx(rectCelula, 3.0f, ORANGE);
                 }
             }
             if (mapa->mina_ativa[linha][coluna] > 0) {
-                DrawCircle(posX + 86, posY + 100, 11, RED);
+                DrawCircle(posX + 88, posY + 64, 12, (Color){ 195, 30, 30, 230 });
+                DrawCircle(posX + 88, posY + 64, 6, GOLD);
+                desenharTexto("MINA", posX + 72, posY + 80, 10, ORANGE);
             }
-            if (interfaceJogo->timer_indicador_dano > 0.0f) {
-                int danoCelula = mapa->ultimo_dano_celula[linha][coluna];
-                int curaCelula = mapa->ultima_cura_celula[linha][coluna];
-                if (danoCelula > 0) {
-                    DrawRectangle(posX + 84, posY + 28, 86, 26, (Color){ 195, 25, 25, 245 });
-                    DrawRectangleLinesEx((Rectangle){ (float)(posX + 84), (float)(posY + 28),
-                                                       86.0f, 26.0f }, 2.0f, GOLD);
-                    desenharTexto(TextFormat("-%d DANO", danoCelula),
-                                  posX + 90, posY + 33, 13, RAYWHITE);
-                } else if (curaCelula > 0) {
-                    DrawRectangle(posX + 84, posY + 28, 86, 26, (Color){ 30, 155, 70, 245 });
-                    DrawRectangleLinesEx((Rectangle){ (float)(posX + 84), (float)(posY + 28),
-                                                       86.0f, 26.0f }, 2.0f, RAYWHITE);
-                    desenharTexto(TextFormat("+%d PV", curaCelula),
-                                  posX + 94, posY + 33, 13, RAYWHITE);
-                }
-            }
-            DrawRectangleLines(posX, posY, interfaceJogo->largura_celula - 4,
-                               interfaceJogo->altura_celula - 4,
-                               (Color){ 180, 193, 184, 255 });
         }
     }
 
@@ -3936,38 +4131,10 @@ static void desenharTabuleiro(const InterfaceJogo *interfaceJogo,
         }
     }
 
-    for (linha = 1; linha < totalUnidades; linha++) {
-        UnidadeOrdenadaTabuleiro unidade = unidades[linha];
-        int indice = linha;
-        while (indice > 0 &&
-               unidades[indice - 1].squareBounds.y > unidade.squareBounds.y) {
-            unidades[indice] = unidades[indice - 1];
-            indice--;
-        }
-        unidades[indice] = unidade;
-    }
-
     for (linha = 0; linha < totalUnidades; linha++) {
         Combatente *unidade = unidades[linha].unidade;
-        Texture2D sprite = obterSpriteUnidade(interfaceJogo, unidade);
-        float alturaSprite = unidades[linha].squareBounds.height *
-                             CHARACTER_BASE_HEIGHT_RATIO * CHARACTER_VISUAL_SCALE;
-        float larguraSprite = sprite.width > 0 && sprite.height > 0 ?
-                              alturaSprite * (float)sprite.width / (float)sprite.height :
-                              alturaSprite * 0.67f;
-        float alturaBarra = CHARACTER_BASE_STATUS_HEIGHT * CHARACTER_VISUAL_SCALE;
-        float deslocamentoVertical = calcularDeslocamentoVerticalUnidade(
-            unidades[linha].squareBounds, alturaBarra);
-        Rectangle spriteBounds = {
-            unidades[linha].squareBounds.x +
-                (unidades[linha].squareBounds.width - larguraSprite) * 0.5f,
-            unidades[linha].squareBounds.y +
-                unidades[linha].squareBounds.height - alturaSprite + deslocamentoVertical,
-            larguraSprite, alturaSprite
-        };
-        bool sobMouse = CheckCollisionPointRec(mouse, unidades[linha].squareBounds) ||
-                        CheckCollisionPointRec(mouse, spriteBounds);
-        if (sobMouse && unidades[linha].squareBounds.y >= hoveredY) {
+        if (CheckCollisionPointRec(mouse, unidades[linha].squareBounds) &&
+            unidades[linha].squareBounds.y >= hoveredY) {
             unidadeHovered = unidade;
             hoveredY = unidades[linha].squareBounds.y;
         }
@@ -3989,21 +4156,49 @@ static void desenharTabuleiro(const InterfaceJogo *interfaceJogo,
             }
         }
     }
+
+    if (interfaceJogo->timer_indicador_dano > 0.0f) {
+        for (linha = 0; linha < LINHAS_TABULEIRO; linha++) {
+            for (coluna = 0; coluna < COLUNAS_TABULEIRO; coluna++) {
+                int posX = interfaceJogo->margem_esquerda + coluna * interfaceJogo->largura_celula;
+                int posY = interfaceJogo->margem_superior + linha * interfaceJogo->altura_celula;
+                int danoCelula = mapa->ultimo_dano_celula[linha][coluna];
+                int curaCelula = mapa->ultima_cura_celula[linha][coluna];
+                if (danoCelula > 0) {
+                    DrawRectangle(posX + 45, posY + 38, 86, 26, (Color){ 195, 25, 25, 245 });
+                    DrawRectangleLinesEx((Rectangle){ (float)(posX + 45), (float)(posY + 38),
+                                                       86.0f, 26.0f }, 2.0f, GOLD);
+                    desenharTexto(TextFormat("-%d DANO", danoCelula),
+                                  posX + 51, posY + 43, 13, RAYWHITE);
+                } else if (curaCelula > 0) {
+                    DrawRectangle(posX + 45, posY + 38, 86, 26, (Color){ 30, 155, 70, 245 });
+                    DrawRectangleLinesEx((Rectangle){ (float)(posX + 45), (float)(posY + 38),
+                                                       86.0f, 26.0f }, 2.0f, RAYWHITE);
+                    desenharTexto(TextFormat("+%d PV", curaCelula),
+                                  posX + 55, posY + 43, 13, RAYWHITE);
+                }
+            }
+        }
+    }
 }
 
 // Desenha a tela de menu principal renderizada em alta nitidez 1080p.
 static void desenharMenu(const InterfaceJogo *interfaceJogo)
 {
+    Rectangle painelTitulo = { 330.0f, 135.0f, 620.0f, 120.0f };
     iniciarQuadroVirtual(interfaceJogo, (Color){ 18, 28, 39, 255 });
-    desenharTextoCentralizado("SEA OF GUNPOWDER", 120, 80, GOLD);
-    desenharTextoCentralizado("CLIQUE PARA COMEÇAR", 250, 40, RAYWHITE);
-    DrawRectangle(470, 350, 340, 70, (Color){ 45, 125, 70, 255 });
-    desenharTexto("INICIAR AVENTURA", 525, 374, 22, RAYWHITE);
-    DrawRectangle(470, 445, 340, 60, (Color){ 135, 48, 38, 255 });
-    DrawRectangleLines(470, 445, 340, 60, GOLD);
-    desenharTexto("SAIR DO JOGO", 575, 464, 20, RAYWHITE);
-    desenharTexto("Controle 100% pelo Mouse | ESC abre o menu de Pause.",
-                  420, 535, 16, LIGHTGRAY);
+    DrawRectangle(0, 0, LARGURA_VIRTUAL, ALTURA_VIRTUAL, (Color){ 8, 16, 26, 75 });
+    DrawUIPanelCustom(painelTitulo, interfaceJogo->texPainelDetalhes,
+                      (Color){ 12, 20, 30, 235 });
+    DrawUIFrameCustom(painelTitulo, interfaceJogo->texFrameRetrato);
+    desenharTextoCentralizadoContornado("SEA OF GUNPOWDER",
+                                        painelTitulo, 46, GOLD);
+    DrawUIButtonCustom((Rectangle){ 470.0f, 350.0f, 340.0f, 70.0f },
+                       "INICIAR AVENTURA", interfaceJogo->texBtnPadrao,
+                       obterFonteInterface());
+    DrawUIButtonCustom((Rectangle){ 470.0f, 445.0f, 340.0f, 60.0f },
+                       "SAIR DO JOGO", interfaceJogo->texBtnPadrao,
+                       obterFonteInterface());
     finalizarQuadroVirtual();
 }
 
@@ -4043,133 +4238,277 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
         int etapaAtual = (interfaceJogo->rota_atual != NULL &&
                           *interfaceJogo->rota_atual != NULL) ?
                          (*interfaceJogo->rota_atual)->etapa : 0;
-        desenharTexto(TextFormat("MAPA DE ROTAS - ETAPA %d DE 3",
-                                 etapaAtual < 3 ? etapaAtual + 1 : 3),
-                      410, 55, 28, GOLD);
-        desenharTexto(TextFormat("Moedas de Ouro: %d | Saques: %d | Desistências: %d",
-                                 interfaceJogo->moedas == NULL ? 0 : *interfaceJogo->moedas,
-                                 contadorSaques, contadorFugas),
-                      390, 95, 18, RAYWHITE);
-        if (etapaAtual >= 3) {
-            DrawRectangle(480, 340, 380, 100, (Color){ 145, 42, 38, 255 });
-            DrawRectangleLines(480, 340, 380, 100, GOLD);
-            desenharTexto("ENFRENTAR BARBA NEGRA", 515, 365, 22, GOLD);
-            desenharTexto("Chefe Final (3000 HP | 2 Fases | 3 Turnos/Rodada)",
-                          500, 400, 14, RAYWHITE);
-            if (etapaAtual == 3) {
-                DrawRectangle(510, 470, 300, 80, (Color){ 115, 77, 42, 255 });
-                DrawRectangleLines(510, 470, 300, 80, GOLD);
-                desenharTexto("LOJA OPCIONAL", 570, 483, 19, GOLD);
-                desenharTexto("Comprar sem avançar rota", 548, 510, 14, RAYWHITE);
-                desenharTexto("Saque: combate antes do chefe", 535, 531, 13, LIGHTGRAY);
-            }
-        } else {
-            DrawRectangle(440, 290, 260, 95, (Color){ 50, 88, 125, 255 });
-            DrawRectangle(730, 290, 260, 95, (Color){ 70, 112, 75, 255 });
-            DrawRectangle(585, 415, 260, 95, (Color){ 115, 77, 42, 255 });
-            desenharTexto("CAMINHO 1 (4 Inimigos)", 458, 308, 19, RAYWHITE);
-            desenharTexto("+2 Níveis | +700 Ouros", 465, 336, 15, GOLD);
-            desenharTexto("+15% Cura | +1 Item", 465, 358, 15, LIGHTGRAY);
-            desenharTexto("CAMINHO 2 (3 Inimigos)", 748, 308, 19, RAYWHITE);
-            desenharTexto("+1 Nível | +300 Ouros", 755, 336, 15, GOLD);
-            desenharTexto("+50% Cura | +2 Itens", 755, 358, 15, LIGHTGRAY);
-            desenharTexto("LOJA OPCIONAL", 625, 433, 20, GOLD);
-            desenharTexto("Comprar sem avançar a rota", 615, 461, 15, RAYWHITE);
-            desenharTexto("Saquear: combate e avança rota", 600, 483, 14, LIGHTGRAY);
-        }
-        DrawRectangle(90, 630, 190, 55,
-                      interfaceJogo->popup_ativo == POPUP_MOCHILA_BUILDS ?
-                      (Color){ 65, 115, 135, 255 } : (Color){ 48, 65, 78, 255 });
-        DrawRectangle(300, 630, 190, 55,
-                      interfaceJogo->popup_ativo == POPUP_CONFIRMAR_FUGA ?
-                      (Color){ 175, 65, 50, 255 } : (Color){ 135, 48, 38, 255 });
-        DrawRectangle(510, 630, 190, 55,
-                      interfaceJogo->popup_ativo == POPUP_DETALHES_PERSONAGEM ?
-                      (Color){ 65, 115, 135, 255 } : (Color){ 48, 65, 78, 255 });
-        desenharTexto("MOCHILA / BUILDS", 104, 648, 16, RAYWHITE);
-        desenharTexto(contadorFugas < 2 ? "FUGIR AVENTURA" : "FUGAS 2/2",
-                      320, 648, 16, contadorFugas < 2 ? RAYWHITE : GRAY);
-        desenharTexto("DETALHES PIRATA", 524, 648, 16, RAYWHITE);
+        Texture2D texRota1 = interfaceJogo->qtdBgCombate > 0 ?
+                             interfaceJogo->bgCombatePool[etapaAtual % interfaceJogo->qtdBgCombate] :
+                             (Texture2D){ 0 };
+        Texture2D texRota2 = interfaceJogo->qtdBgCombate > 1 ?
+                             interfaceJogo->bgCombatePool[(etapaAtual + 2) % interfaceJogo->qtdBgCombate] :
+                             texRota1;
+        Texture2D texLoja = interfaceJogo->qtdBgCombate > 0 ?
+                            interfaceJogo->bgCombatePool[interfaceJogo->qtdBgCombate - 1] :
+                            (Texture2D){ 0 };
+        DrawRectangle(0, 0, LARGURA_VIRTUAL, ALTURA_VIRTUAL, (Color){ 8, 16, 26, 110 });
+        DrawUIPanelCustom((Rectangle){ 200.0f, 18.0f, 880.0f, 104.0f },
+                          interfaceJogo->texPainelDetalhes, (Color){ 14, 24, 34, 245 });
+        desenharTextoCentralizadoContornado(
+            TextFormat("MAPA DE ROTAS — ETAPA %d DE 3",
+                       etapaAtual < 3 ? etapaAtual + 1 : 3),
+            (Rectangle){ 200.0f, 30.0f, 880.0f, 38.0f }, 28, GOLD);
+        desenharTextoCentralizado(
+            TextFormat("Moedas de Ouro: %d   |   Saques realizados: %d   |   Desistências: %d/2",
+                       interfaceJogo->moedas == NULL ? 0 : *interfaceJogo->moedas,
+                       contadorSaques, contadorFugas),
+            78, 17, RAYWHITE);
+
+        DrawUIPanelCustom((Rectangle){ 40.0f, 140.0f, 370.0f, 455.0f },
+                          interfaceJogo->texPainelDetalhes, (Color){ 14, 24, 34, 240 });
+        desenharTextoCentralizadoContornado(
+            "TRIPULAÇÃO ATIVA",
+            (Rectangle){ 40.0f, 156.0f, 370.0f, 28.0f }, 18, GOLD);
         if (mapa != NULL) {
             int linha;
             for (linha = 0; linha < LINHAS_TABULEIRO; linha++) {
                 Combatente *pirata = mapa->celulas[linha][0];
                 int posCardY = 200 + linha * 100;
                 if (pirata != NULL && pirata->vivo) {
-                    DrawRectangle(55, posCardY, 340, 82, (Color){ 35, 75, 105, 255 });
-                    if (pirata == interfaceJogo->entidade_selecionada) {
-                        DrawRectangleLines(55, posCardY, 340, 82, GOLD);
-                    }
-                    desenharTexto(pirata->nome, 72, posCardY + 8, 18, RAYWHITE);
-                    desenharTexto(TextFormat("PV %d/%d | Nível %d | Passivos %d/5",
-                                             pirata->vida_atual, pirata->vida_maxima,
-                                             pirata->nivel, pirata->build_passivos.tamanho),
-                                  72, posCardY + 34, 14, LIGHTGRAY);
-                    desenharIndicadoresStatusUnidade(pirata, 72, posCardY + 58, 310);
+                    bool selecionado = pirata == interfaceJogo->entidade_selecionada;
+                    Rectangle retratoCard = { 62.0f, (float)(posCardY + 9), 64.0f, 64.0f };
+                    DrawRectangle(55, posCardY, 340, 82,
+                                  selecionado ? (Color){ 34, 62, 84, 250 } :
+                                                (Color){ 22, 38, 52, 245 });
+                    DrawRectangleLinesEx((Rectangle){ 55.0f, (float)posCardY, 340.0f, 82.0f },
+                                         selecionado ? 2.5f : 1.5f,
+                                         selecionado ? GOLD : (Color){ 95, 120, 138, 220 });
+                    DrawRectangle((int)retratoCard.x + 2, (int)retratoCard.y + 2,
+                                  (int)retratoCard.width - 4, (int)retratoCard.height - 4,
+                                  (Color){ 28, 54, 76, 255 });
+                    DrawCharacterPortrait(obterSpriteBasePirata(interfaceJogo, pirata),
+                                          retratoCard);
+                    desenharTexto(TextFormat("%s (Nv %d)", pirata->nome, pirata->nivel),
+                                  136, posCardY + 7, 16, selecionado ? GOLD : RAYWHITE);
+                    desenharTexto(TextFormat("Passivos %d/5", pirata->build_passivos.tamanho),
+                                  292, posCardY + 9, 13, LIGHTGRAY);
+                    desenharBarraStatusCombatente(interfaceJogo, pirata,
+                                                  (Rectangle){ 136.0f, (float)(posCardY + 30),
+                                                               248.0f, 44.0f }, 10);
                 }
             }
+        }
+        desenharTexto("Clique em um pirata para inspecionar sua ficha.",
+                      62, 508, 13, LIGHTGRAY);
+
+        DrawUIPanelCustom((Rectangle){ 420.0f, 140.0f, 820.0f, 455.0f },
+                          interfaceJogo->texPainelDetalhes, (Color){ 14, 24, 34, 240 });
+        desenharTextoCentralizadoContornado(
+            etapaAtual >= 3 ? "CONFRONTO DECISIVO NOS SETE MARES" :
+                              "ESCOLHA O PRÓXIMO RUMO DA EXPEDIÇÃO",
+            (Rectangle){ 420.0f, 158.0f, 820.0f, 30.0f }, 20, GOLD);
+        {
+            int passo;
+            for (passo = 0; passo < 4; passo++) {
+                int nodoX = 505 + passo * 170;
+                bool concluido = passo < etapaAtual;
+                bool atual = (passo == etapaAtual) || (etapaAtual >= 3 && passo == 3);
+                if (passo < 3) {
+                    DrawRectangle(nodoX + 70, 214, 100, 4,
+                                  concluido ? GOLD : (Color){ 55, 75, 90, 255 });
+                }
+                DrawRectangle(nodoX - 50, 200, 120, 32,
+                              atual ? (Color){ 52, 95, 125, 255 } :
+                              (concluido ? (Color){ 35, 85, 55, 255 } :
+                                           (Color){ 24, 36, 48, 255 }));
+                DrawRectangleLines(nodoX - 50, 200, 120, 32,
+                                   atual ? GOLD : (concluido ? GREEN : GRAY));
+                desenharTextoCentralizadoContornado(
+                    passo < 3 ? TextFormat("ETAPA %d", passo + 1) : "CHEFE FINAL",
+                    (Rectangle){ (float)(nodoX - 50), 200.0f, 120.0f, 32.0f },
+                    13, atual ? GOLD : RAYWHITE);
+            }
+        }
+        if (etapaAtual >= 3) {
+            Rectangle cardBoss = { 480.0f, 340.0f, 380.0f, 100.0f };
+            DrawRectangle(480, 340, 380, 100, (Color){ 55, 18, 18, 255 });
+            desenharTexturaCapaTint(interfaceJogo->bgBoss, cardBoss,
+                                    (Color){ 210, 140, 140, 130 });
+            DrawRectangle(480, 340, 380, 100, (Color){ 22, 10, 12, 155 });
+            DrawUIFrameCustom(cardBoss, interfaceJogo->texFrameRetrato);
+            desenharTextoCentralizadoContornado("ENFRENTAR BARBA NEGRA",
+                                                (Rectangle){ 480.0f, 355.0f, 380.0f, 32.0f },
+                                                22, GOLD);
+            desenharTextoCentralizadoContornado(
+                "Chefe Final (3000 HP | 2 Fases | 3 Turnos/Rodada)",
+                (Rectangle){ 480.0f, 395.0f, 380.0f, 24.0f }, 14, RAYWHITE);
+            if (etapaAtual == 3) {
+                Rectangle cardLojaBoss = { 510.0f, 470.0f, 300.0f, 80.0f };
+                DrawRectangle(510, 470, 300, 80, (Color){ 52, 36, 22, 255 });
+                desenharTexturaCapaTint(texLoja, cardLojaBoss,
+                                        (Color){ 220, 195, 150, 120 });
+                DrawRectangle(510, 470, 300, 80, (Color){ 16, 20, 26, 165 });
+                DrawUIFrameCustom(cardLojaBoss, interfaceJogo->texFrameRetrato);
+                desenharTextoCentralizadoContornado("LOJA OPCIONAL",
+                                                    (Rectangle){ 510.0f, 478.0f, 300.0f, 24.0f },
+                                                    18, GOLD);
+                desenharTextoCentralizado("Comprar sem avançar rota | Saque: combate",
+                                          508, 13, RAYWHITE);
+            }
+            DrawRectangle(885, 290, 325, 260, (Color){ 16, 28, 38, 230 });
+            DrawRectangleLines(885, 290, 325, 260, GOLD);
+            desenharTexto("ALERTA DO CHEFE FINAL", 935, 306, 16, GOLD);
+            (void)desenharTextoQuebrado(
+                "Barba Negra possui 3000 PV e age 3 vezes por rodada. Ao cair para 50% de PV, desperta a Fase 2: convoca 2 Grunts com Espada (ficando imune até serem derrotados) e espalha minas pelo convés!",
+                900, 338, 295, 14, 19, RAYWHITE, 0, 0);
+        } else {
+            Rectangle cardCam1 = { 440.0f, 290.0f, 260.0f, 95.0f };
+            Rectangle cardCam2 = { 730.0f, 290.0f, 260.0f, 95.0f };
+            Rectangle cardLoja = { 585.0f, 415.0f, 260.0f, 95.0f };
+            DrawRectangle(440, 290, 260, 95, (Color){ 28, 56, 82, 255 });
+            desenharTexturaCapaTint(texRota1, cardCam1, (Color){ 190, 215, 240, 125 });
+            DrawRectangle(440, 290, 260, 95, (Color){ 12, 22, 34, 165 });
+            DrawUIFrameCustom(cardCam1, interfaceJogo->texFrameRetrato);
+            desenharTextoCentralizadoContornado("CAMINHO 1 (4 Inimigos)",
+                                                (Rectangle){ 440.0f, 302.0f, 260.0f, 24.0f },
+                                                17, RAYWHITE);
+            desenharTextoCentralizadoContornado("+2 Níveis | +700 Ouros",
+                                                (Rectangle){ 440.0f, 330.0f, 260.0f, 22.0f },
+                                                15, GOLD);
+            desenharTextoCentralizadoContornado("+15% Cura | +1 Item",
+                                                (Rectangle){ 440.0f, 354.0f, 260.0f, 20.0f },
+                                                14, SKYBLUE);
+
+            DrawRectangle(730, 290, 260, 95, (Color){ 32, 68, 46, 255 });
+            desenharTexturaCapaTint(texRota2, cardCam2, (Color){ 190, 235, 200, 125 });
+            DrawRectangle(730, 290, 260, 95, (Color){ 12, 24, 18, 165 });
+            DrawUIFrameCustom(cardCam2, interfaceJogo->texFrameRetrato);
+            desenharTextoCentralizadoContornado("CAMINHO 2 (3 Inimigos)",
+                                                (Rectangle){ 730.0f, 302.0f, 260.0f, 24.0f },
+                                                17, RAYWHITE);
+            desenharTextoCentralizadoContornado("+1 Nível | +300 Ouros",
+                                                (Rectangle){ 730.0f, 330.0f, 260.0f, 22.0f },
+                                                15, GOLD);
+            desenharTextoCentralizadoContornado("+50% Cura | +2 Itens",
+                                                (Rectangle){ 730.0f, 354.0f, 260.0f, 20.0f },
+                                                14, GREEN);
+
+            DrawRectangle(585, 415, 260, 95, (Color){ 68, 46, 26, 255 });
+            desenharTexturaCapaTint(texLoja, cardLoja, (Color){ 235, 205, 160, 125 });
+            DrawRectangle(585, 415, 260, 95, (Color){ 20, 16, 12, 165 });
+            DrawUIFrameCustom(cardLoja, interfaceJogo->texFrameRetrato);
+            desenharTextoCentralizadoContornado("LOJA OPCIONAL",
+                                                (Rectangle){ 585.0f, 427.0f, 260.0f, 24.0f },
+                                                18, GOLD);
+            desenharTextoCentralizadoContornado("Comprar sem avançar a rota",
+                                                (Rectangle){ 585.0f, 455.0f, 260.0f, 20.0f },
+                                                14, RAYWHITE);
+            desenharTextoCentralizadoContornado("Saquear: combate e avança rota",
+                                                (Rectangle){ 585.0f, 479.0f, 260.0f, 20.0f },
+                                                13, ORANGE);
+
+            DrawRectangle(1010, 275, 208, 285, (Color){ 16, 26, 36, 230 });
+            DrawRectangleLines(1010, 275, 208, 285, (Color){ 165, 138, 78, 210 });
+            desenharTexto("DIÁRIO DE NAVEGAÇÃO", 1030, 290, 14, GOLD);
+            (void)desenharTextoQuebrado(
+                "• Caminho 1: rota agressiva com maior evolução (+2 Níveis e +700 Ouros).\n• Caminho 2: rota segura com maior recuperação (+50% PV e +2 Itens).\n• Loja: compre suprimentos sem gastar a etapa ou saqueie todo o estoque!",
+                1022, 318, 184, 13, 17, LIGHTGRAY, 0, 0);
+        }
+
+        DrawUIPanelCustom((Rectangle){ 70.0f, 616.0f, 650.0f, 82.0f },
+                          interfaceJogo->texPainelDetalhes, (Color){ 12, 20, 29, 240 });
+        DrawUIButtonCustom((Rectangle){ 90.0f, 630.0f, 190.0f, 55.0f },
+                           "MOCHILA / BUILDS", interfaceJogo->texBtnPadrao,
+                           obterFonteInterface());
+        DrawUIButtonCustom((Rectangle){ 300.0f, 630.0f, 190.0f, 55.0f },
+                           contadorFugas < 2 ? "FUGIR AVENTURA" : "FUGAS 2/2",
+                           interfaceJogo->texBtnPadrao, obterFonteInterface());
+        DrawUIButtonCustom((Rectangle){ 510.0f, 630.0f, 190.0f, 55.0f },
+                           "DETALHES PIRATA", interfaceJogo->texBtnPadrao,
+                           obterFonteInterface());
+        if (interfaceJogo->popup_ativo == POPUP_MOCHILA_BUILDS) {
+            DrawRectangleLines(90, 630, 190, 55, GOLD);
+        } else if (interfaceJogo->popup_ativo == POPUP_CONFIRMAR_FUGA) {
+            DrawRectangleLines(300, 630, 190, 55, GOLD);
+        } else if (interfaceJogo->popup_ativo == POPUP_DETALHES_PERSONAGEM) {
+            DrawRectangleLines(510, 630, 190, 55, GOLD);
         }
     } else if (interfaceJogo->estado == TELA_COMBATE_3X6 && mapa != NULL) {
         desenharFila(interfaceJogo);
         desenharHUDAtorAtivo(interfaceJogo);
+        DrawUIPanelCustom((Rectangle){ 4.0f, 62.0f, 462.0f, 82.0f },
+                          interfaceJogo->texPainelDetalhes, (Color){ 12, 20, 29, 235 });
+        DrawUIPanelCustom((Rectangle){ 472.0f, 4.0f, 438.0f, 140.0f },
+                          interfaceJogo->texPainelDetalhes, (Color){ 12, 20, 29, 240 });
         if (interfaceJogo->fase_pre_combate_ativa) {
-            desenharTexto("PRÉ-COMBATE | Posicione a tripulação nas colunas 0 e 1.",
-                          480, 10, 14, GOLD);
-            desenharTexto("Selecione uma unidade para ver seus detalhes.",
-                          480, 34, 13, LIGHTGRAY);
+            desenharTexto("FASE DE PREPARAÇÃO", 22, 74, 15, GOLD);
+            desenharTexto("Colunas 0 e 1: Zona de posicionamento aliado", 22, 96, 13, SKYBLUE);
+            desenharTexto("Clique nos piratas para trocar posições antes da luta.", 22, 116, 12, LIGHTGRAY);
+            desenharTexto("COMANDO DO CONVÉS — PRÉ-COMBATE", 492, 18, 16, GOLD);
+            (void)desenharTextoQuebrado(
+                "Organize sua formação nas duas primeiras colunas, equipe builds passivas na Mochila e inspecione os inimigos clicando neles.",
+                492, 48, 400, 13, 18, RAYWHITE, 0, 0);
         } else {
-            desenharTexto(TextFormat("Turno: %s",
-                                     interfaceJogo->ator_atual == NULL ?
-                                     "aguardando" : interfaceJogo->ator_atual->nome),
-                          480, 10, 14,
-                          (interfaceJogo->ator_atual != NULL &&
-                           !interfaceJogo->ator_atual->aliado) ? ORANGE : GOLD);
-            DrawRectangleRec(converterBoundsVirtual((Rectangle){
-                700.0f, 5.0f, 180.0f, 40.0f
-            }), (Color){ 25, 38, 48, 245 });
-            DrawRectangleLinesEx((Rectangle){ 700.0f, 5.0f, 180.0f, 40.0f },
-                                 2.0f, GOLD);
-            desenharTexto(TextFormat("AÇÕES: %d",
-                                     interfaceJogo->ator_atual == NULL ?
-                                     0 : interfaceJogo->ator_atual->acoes_basicas_restantes),
-                          716, 12, 19, GOLD);
-            if (interfaceJogo->log_combate[0] != '\0') {
-                desenharTexto(interfaceJogo->log_combate, 90, 578, 12, RAYWHITE);
-            }
+            int gruntsVivos = 0;
             if (mapa->boss_fase_2_ativa) {
-                int gruntsVivos = 0;
-                int linha;
-                int coluna;
-                for (linha = 0; linha < LINHAS_TABULEIRO; linha++) {
-                    for (coluna = 0; coluna < COLUNAS_TABULEIRO; coluna++) {
-                        Combatente *unidade = mapa->celulas[linha][coluna];
-                        if (unidade != NULL && unidade->vivo &&
-                            unidade->tipo_inimigo == INIMIGO_GRUNT_ESPADA &&
-                            (unidade->id == 110 || unidade->id == 111)) {
+                int linB;
+                int colB;
+                for (linB = 0; linB < LINHAS_TABULEIRO; linB++) {
+                    for (colB = 0; colB < COLUNAS_TABULEIRO; colB++) {
+                        Combatente *unidB = mapa->celulas[linB][colB];
+                        if (unidB != NULL && unidB->vivo &&
+                            unidB->tipo_inimigo == INIMIGO_GRUNT_ESPADA &&
+                            (unidB->id == 110 || unidB->id == 111)) {
                             gruntsVivos++;
                         }
                     }
                 }
-                if (gruntsVivos > 0) {
-                    DrawRectangle(480, 70, 410, 30, (Color){ 145, 42, 38, 245 });
-                    DrawRectangleLines(480, 70, 410, 30, GOLD);
-                    desenharTexto(TextFormat("BARBA NEGRA IMUNE: derrote os Grunts! Restantes: %d",
-                                             gruntsVivos),
-                                  490, 77, 12, RAYWHITE);
-                }
             }
+            if (gruntsVivos > 0) {
+                DrawRectangle(16, 72, 438, 34, (Color){ 145, 38, 34, 245 });
+                DrawRectangleLines(16, 72, 438, 34, GOLD);
+                desenharTexto(TextFormat("BARBA NEGRA IMUNE: derrote os Grunts! (%d restantes)",
+                                         gruntsVivos),
+                              26, 82, 13, RAYWHITE);
+                desenharTexto("Verde: Mover | Amarelo: Alcance | Vermelho: Fogo Amigo",
+                              22, 114, 12, LIGHTGRAY);
+            } else {
+                desenharTexto("LEGENDA TÁTICA DO TABULEIRO:", 22, 74, 14, GOLD);
+                desenharTexto("Verde: Casa de Movimento   |   Ouro: Alcance da Habilidade",
+                              22, 96, 12, RAYWHITE);
+                desenharTexto("Vermelho: Alerta de Fogo Amigo (50% dano em aliados)",
+                              22, 116, 12, ORANGE);
+            }
+            desenharTexto(TextFormat("TURNO: %s",
+                                     interfaceJogo->ator_atual == NULL ?
+                                     "Aguardando" : interfaceJogo->ator_atual->nome),
+                          492, 18, 17,
+                          (interfaceJogo->ator_atual != NULL &&
+                           !interfaceJogo->ator_atual->aliado) ? ORANGE : GOLD);
+            DrawRectangle(745, 13, 148, 30, (Color){ 24, 40, 52, 250 });
+            DrawRectangleLines(745, 13, 148, 30, GOLD);
+            desenharTexto(TextFormat("AÇÕES: %d",
+                                     interfaceJogo->ator_atual == NULL ?
+                                     0 : interfaceJogo->ator_atual->acoes_basicas_restantes),
+                          772, 19, 16, GOLD);
+            DrawRectangle(488, 48, 406, 82, (Color){ 14, 24, 34, 215 });
+            DrawRectangleLines(488, 48, 406, 82, (Color){ 85, 110, 128, 190 });
+            (void)desenharTextoQuebrado(
+                interfaceJogo->log_combate[0] != '\0' ?
+                interfaceJogo->log_combate :
+                "Selecione uma ação na barra inferior para comandar sua tripulação.",
+                498, 56, 386, 14, 19, RAYWHITE, 48, 128);
         }
         desenharTabuleiro(interfaceJogo, mapa, alcanceAtivo);
-        DrawUIPanelCustom((Rectangle){ 70.0f, 600.0f, 1170.0f, 102.0f },
+        DrawUIPanelCustom((Rectangle){ 70.0f, 568.0f, 1140.0f, 134.0f },
                           interfaceJogo->texPainelDetalhes,
-                          (Color){ 12, 20, 29, 235 });
+                          (Color){ 12, 20, 29, 242 });
+        DrawRectangle(88, 578, 1104, 46, (Color){ 14, 24, 34, 225 });
+        DrawRectangleLines(88, 578, 1104, 46, (Color){ 120, 105, 65, 190 });
         if (interfaceJogo->fase_pre_combate_ativa) {
-            DrawDynamicDescriptionBox((Vector2){ 90.0f, 578.0f }, 830.0f,
-                                      NULL,
-                                      "Clique nos piratas para posicionar/trocar antes de iniciar.");
+            desenharTexto("PREPARAÇÃO PRÉ-COMBATE:", 98, 583, 14, GOLD);
+            desenharTexto("Clique em um pirata e depois em qualquer casa das Colunas 0 ou 1 para posicionar ou trocar de lugar.",
+                          98, 602, 13, RAYWHITE);
             DrawUIButtonCustom((Rectangle){ 90.0f, 630.0f, 260.0f, 55.0f },
                                "INICIAR COMBATE", interfaceJogo->texBtnPadrao,
                                obterFonteInterface());
+            DrawRectangleLines(90, 630, 260, 55, (Color){ 85, 220, 120, 230 });
             DrawUIButtonCustom((Rectangle){ 370.0f, 630.0f, 190.0f, 55.0f },
                                "MOCHILA / ITENS", interfaceJogo->texBtnPadrao,
                                obterFonteInterface());
@@ -4187,24 +4526,29 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
                              interfaceJogo->ator_atual->habilidades_desbloqueadas : 1;
             if (interfaceJogo->ator_atual != NULL && interfaceJogo->ator_atual->aliado) {
                 if (interfaceJogo->acao_combate == ACAO_TELA_MOVER) {
-                    DrawDynamicDescriptionBox(
-                        (Vector2){ 90.0f, 601.0f }, 1135.0f, "MOVER",
-                        "Clique em uma casa verde ortogonal vazia (custo: 1 Estamina).");
+                    desenharTexto("AÇÃO SELECIONADA — MOVER (Custo: 1 Estamina)",
+                                  98, 582, 14, GOLD);
+                    desenharTexto("Clique em uma casa destacada em verde para deslocar o pirata.",
+                                  98, 601, 13, RAYWHITE);
                 } else if (interfaceJogo->acao_combate >= ACAO_TELA_HABILIDADE_0 &&
                            interfaceJogo->acao_combate <= ACAO_TELA_HABILIDADE_2) {
                     int idxHab = interfaceJogo->acao_combate - ACAO_TELA_HABILIDADE_0;
                     char cabecalhoCompacto[160];
                     formatarCabecalhoHabilidade(interfaceJogo->ator_atual, idxHab, true,
                                                 cabecalhoCompacto, sizeof(cabecalhoCompacto));
-                    DrawDynamicDescriptionBox((Vector2){ 90.0f, 601.0f }, 1135.0f,
-                                              cabecalhoCompacto,
-                                              descricaoHabilidadeDetalhada(
-                                                  interfaceJogo->ator_atual, idxHab));
+                    desenharTexto(cabecalhoCompacto, 98, 581, 14, GOLD);
+                    (void)desenharTextoQuebrado(
+                        descricaoHabilidadeDetalhada(interfaceJogo->ator_atual, idxHab),
+                        98, 598, 1084, 12, 13, RAYWHITE, 596, 623);
                 } else {
-                    DrawDynamicDescriptionBox(
-                        (Vector2){ 90.0f, 601.0f }, 1135.0f, "DICA",
-                        "Escolha uma ação abaixo ou clique em DETALHES para ver todas as descrições.");
+                    desenharTexto("COMANDO DE TURNO:", 98, 582, 14, GOLD);
+                    desenharTexto("Escolha Mover, Descansar, uma Habilidade ou Usar Item abaixo, ou clique em DETALHES para ver a ficha.",
+                                  98, 601, 13, LIGHTGRAY);
                 }
+            } else {
+                desenharTexto("TURNO DO INIMIGO EM ANDAMENTO...", 98, 582, 14, ORANGE);
+                desenharTexto("Observe a movimentação e os ataques da tripulação adversária no convés.",
+                              98, 601, 13, LIGHTGRAY);
             }
             DrawUIButtonCustom((Rectangle){ 90.0f, 630.0f, 130.0f, 55.0f },
                                "MOVER (1)", interfaceJogo->texBtnPadrao,
@@ -4228,12 +4572,14 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
                                "DETALHES", interfaceJogo->texBtnPadrao,
                                obterFonteInterface());
             if (habDesbloq < 2) {
-                DrawRectangle(525, 630, 130, 55, (Color){ 10, 14, 18, 130 });
-                desenharTexto("HAB 2 (Nv3)", 536, 648, 15, GRAY);
+                DrawRectangle(525, 630, 130, 55, (Color){ 10, 14, 18, 155 });
+                desenharTextoCentralizadoContornado(
+                    "HAB 2 (Nv3)", (Rectangle){ 525.0f, 630.0f, 130.0f, 55.0f }, 14, GRAY);
             }
             if (habDesbloq < 3) {
-                DrawRectangle(670, 630, 130, 55, (Color){ 10, 14, 18, 130 });
-                desenharTexto("ULT (Nv6)", 684, 648, 15, GRAY);
+                DrawRectangle(670, 630, 130, 55, (Color){ 10, 14, 18, 155 });
+                desenharTextoCentralizadoContornado(
+                    "ULT (Nv6)", (Rectangle){ 670.0f, 630.0f, 130.0f, 55.0f }, 14, GRAY);
             }
             if (interfaceJogo->acao_combate == ACAO_TELA_MOVER) {
                 DrawRectangleLines(90, 630, 130, 55, GOLD);
@@ -4252,16 +4598,33 @@ void desenharInterface(const InterfaceJogo *interfaceJogo, const Tabuleiro3x6 *m
             }
         }
     } else if (interfaceJogo->estado == TELA_VITORIA) {
-        desenharTexto("VITÓRIA! BARBA NEGRA FOI DERROTADO!", 265, 250, 32, GOLD);
-        desenharTexto("A tripulação conquistou os mares em Sea Of Gunpowder!",
-                      330, 315, 20, RAYWHITE);
-        DrawRectangle(470, 440, 340, 65, (Color){ 45, 125, 70, 255 });
-        desenharTexto("NOVA AVENTURA", 540, 462, 22, RAYWHITE);
+        DrawRectangle(0, 0, LARGURA_VIRTUAL, ALTURA_VIRTUAL, (Color){ 8, 16, 26, 125 });
+        DrawUIPanelCustom((Rectangle){ 220.0f, 180.0f, 840.0f, 360.0f },
+                          interfaceJogo->texPainelDetalhes, (Color){ 14, 24, 34, 248 });
+        desenharTextoCentralizadoContornado(
+            "VITÓRIA! BARBA NEGRA FOI DERROTADO!",
+            (Rectangle){ 220.0f, 235.0f, 840.0f, 42.0f }, 32, GOLD);
+        desenharTextoCentralizado(
+            "Sua tripulação conquistou os Sete Mares em Sea Of Gunpowder!",
+            310, 20, RAYWHITE);
+        DrawUIButtonCustom((Rectangle){ 470.0f, 440.0f, 340.0f, 65.0f },
+                           "NOVA AVENTURA", interfaceJogo->texBtnPadrao,
+                           obterFonteInterface());
+        DrawRectangleLines(470, 440, 340, 65, GOLD);
     } else if (interfaceJogo->estado == TELA_FIM_DE_JOGO) {
-        desenharTexto("FIM DE JOGO - TRIPULAÇÃO DERROTADA", 290, 250, 32, ORANGE);
-        desenharTexto("Todos os seus piratas tombaram em combate.", 420, 315, 20, RAYWHITE);
-        DrawRectangle(470, 440, 340, 65, (Color){ 45, 125, 70, 255 });
-        desenharTexto("TENTAR NOVAMENTE", 518, 462, 22, RAYWHITE);
+        DrawRectangle(0, 0, LARGURA_VIRTUAL, ALTURA_VIRTUAL, (Color){ 14, 8, 10, 145 });
+        DrawUIPanelCustom((Rectangle){ 220.0f, 180.0f, 840.0f, 360.0f },
+                          interfaceJogo->texPainelDetalhes, (Color){ 18, 16, 22, 248 });
+        desenharTextoCentralizadoContornado(
+            "FIM DE JOGO — TRIPULAÇÃO DERROTADA",
+            (Rectangle){ 220.0f, 235.0f, 840.0f, 42.0f }, 32, ORANGE);
+        desenharTextoCentralizado(
+            "Todos os seus piratas tombaram em combate.",
+            310, 20, RAYWHITE);
+        DrawUIButtonCustom((Rectangle){ 470.0f, 440.0f, 340.0f, 65.0f },
+                           "TENTAR NOVAMENTE", interfaceJogo->texBtnPadrao,
+                           obterFonteInterface());
+        DrawRectangleLines(470, 440, 340, 65, GOLD);
     }
     if (interfaceJogo->popup_ativo != POPUP_NENHUM) {
         if (interfaceJogo->popup_ativo == POPUP_MOCHILA_BUILDS) {
