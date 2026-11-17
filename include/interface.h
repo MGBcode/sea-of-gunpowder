@@ -37,7 +37,7 @@ typedef enum {
 typedef struct {
     Font fonteJogo;
     Texture2D spritesPiratas[5][7];
-    Texture2D spritesInimigos[4][4];
+    Texture2D spritesInimigos[5][5];
     Texture2D bgMar;
     Texture2D bgCombatePool[6];
     int qtdBgCombate;

@@ -1771,7 +1771,7 @@ static Texture2D carregarTexturaBackground(const char *nomeArquivo)
     return carregarTexturaOpcional(caminho);
 }
 
-// Seleciona a pose visual do pirata ou Grunt conforme seu estado atual.
+// Seleciona a pose visual da unidade conforme seu tipo e estado atual.
 static Texture2D obterSpriteUnidade(const InterfaceJogo *interfaceJogo,
                                    const Combatente *unidade)
 {
@@ -1802,7 +1802,7 @@ static Texture2D obterSpriteUnidade(const InterfaceJogo *interfaceJogo,
     }
 
     if (unidade->tipo_inimigo < INIMIGO_GRUNT_ESPADA ||
-        unidade->tipo_inimigo > INIMIGO_MARUJO_GORDO) {
+        unidade->tipo_inimigo > INIMIGO_BOSS_BARBA_NEGRA) {
         return (Texture2D){ 0 };
     }
     indiceSprite = (int)unidade->tipo_inimigo;
@@ -1811,7 +1811,7 @@ static Texture2D obterSpriteUnidade(const InterfaceJogo *interfaceJogo,
     } else if (interfaceJogo->unidade_em_animacao == unidade &&
                interfaceJogo->timer_pose_acao_unidade > 0.0f &&
                interfaceJogo->pose_acao_sprite_unidade >= SPRITE_PIRATA_ACAO_0 &&
-               interfaceJogo->pose_acao_sprite_unidade <= SPRITE_PIRATA_ACAO_1) {
+               interfaceJogo->pose_acao_sprite_unidade <= SPRITE_PIRATA_ACAO_2) {
         pose = interfaceJogo->pose_acao_sprite_unidade;
     }
     textura = interfaceJogo->spritesInimigos[indiceSprite][pose];
@@ -1870,6 +1870,12 @@ static void registrarPoseAcaoUnidade(InterfaceJogo *interfaceJogo,
             }
             pose = SPRITE_PIRATA_ACAO_0 + indiceHabilidade;
             break;
+        case INIMIGO_BOSS_BARBA_NEGRA:
+            if (indiceHabilidade > 2) {
+                return;
+            }
+            pose = SPRITE_PIRATA_ACAO_0 + indiceHabilidade;
+            break;
         default:
             return;
         }
@@ -1904,15 +1910,17 @@ static void desenharSpriteUnidade(Texture2D textura, Rectangle bounds)
 // Inicializa a janela em 1920x1080 (1080p), o framebuffer 1080p e a fonte TrueType de alta nitidez.
 void inicializarInterface(InterfaceJogo *interfaceJogo)
 {
-    static const char *arquivosSpritesInimigos[4][4] = {
+    static const char *arquivosSpritesInimigos[5][5] = {
         { "gruntEspadaBase.png", "gruntEspadaDescanso.png",
-          "gruntEspadaCorte.png", NULL },
+          "gruntEspadaCorte.png", NULL, NULL },
         { "gruntPistolaBase.png", "gruntPistolaDescanso.png",
-          "gruntPistolaTiro.png", "gruntPistolaGranada.png" },
+          "gruntPistolaTiro.png", "gruntPistolaGranada.png", NULL },
         { "AtiradorMagreloBase.png", "AtiradorMagreloDescanso.png",
-          "AtiradorMagreloTiro.png", NULL },
+          "AtiradorMagreloTiro.png", NULL, NULL },
         { "MarujoGordoBase.png", "MarujoGordoDescanso.png",
-          "MarujoGordoTiro.png", "MarujoGordoCura.png" }
+          "MarujoGordoTiro.png", "MarujoGordoCura.png", NULL },
+        { "BarbaNegraBase.png", "BarbaNegraDescanso.png", "BarbaNegraCorte.png",
+          "BarbaNegraTiro.png", "BarbaNegraConjurando.png" }
     };
     static const char *arquivosSpritesPiratas[5][TOTAL_POSES_SPRITES_PIRATA] = {
         { "bucaneiroBase.png", "bucaneiroDescanso.png", "bucaneiroCorte.png",
@@ -1997,8 +2005,8 @@ void inicializarInterface(InterfaceJogo *interfaceJogo)
                 carregarTexturaOpcional(caminhoSprite);
         }
     }
-    for (indice = 0; indice < 4; indice++) {
-        for (pose = 0; pose < 4; pose++) {
+    for (indice = 0; indice < 5; indice++) {
+        for (pose = 0; pose < 5; pose++) {
             char caminhoSprite[160];
             if (arquivosSpritesInimigos[indice][pose] == NULL) {
                 interfaceJogo->spritesInimigos[indice][pose] = (Texture2D){ 0 };
@@ -4665,9 +4673,9 @@ void descarregarInterface(InterfaceJogo *interfaceJogo)
                 }
             }
         }
-        for (indice = 0; indice < 4; indice++) {
+        for (indice = 0; indice < 5; indice++) {
             int pose;
-            for (pose = 0; pose < 4; pose++) {
+            for (pose = 0; pose < 5; pose++) {
                 if (interfaceJogo->spritesInimigos[indice][pose].id != 0) {
                     UnloadTexture(interfaceJogo->spritesInimigos[indice][pose]);
                     interfaceJogo->spritesInimigos[indice][pose] = (Texture2D){ 0 };
